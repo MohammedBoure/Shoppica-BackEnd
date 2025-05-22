@@ -2,7 +2,7 @@
 
 ## Entity-Relationship Diagram (ER Diagram)
 
-The following diagram illustrates the relationships between tables in the Shoppica database using Mermaid notation:
+The following diagram illustrates the relationships between tables in the Shoppica database (created using [Mermaid](https://mermaid.js.org/)):
 
 ```mermaid
 erDiagram

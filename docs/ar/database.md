@@ -2,7 +2,7 @@
 
 ## مخطط العلاقات (ER Diagram)
 
-يوضح المخطط التالي العلاقات بين الجداول في قاعدة بيانات Shoppica باستخدام ترميز Mermaid:
+يوضح المخطط التالي العلاقات بين الجداول في قاعدة بيانات Shoppica باستخدام ترميز Mermaid (created using [Mermaid](https://mermaid.js.org/)):
 
 ```mermaid
 erDiagram
