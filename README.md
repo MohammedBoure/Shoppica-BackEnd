@@ -29,7 +29,7 @@ The project is organized as follows:
    ```
 
 3. **Database Setup**:
-   The database models are defined in the `database/` directory. The SQLite database file is located at `database/shop.db`. Refer to the [database documentation](./database/) for details on the schema and usage.
+   The database models are defined in the `database/` directory. The SQLite database file is located at `database/shop.db`. Refer to the [database documentation](./docs/ar/database.md) for details on the schema and usage.
 
 4. **Running Tests**:
    Tests are located in the `test/database/` directory. Run them using:
