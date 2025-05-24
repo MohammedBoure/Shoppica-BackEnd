@@ -27,14 +27,19 @@ class UserManager(Database):
         """Retrieves a user by their ID."""
         try:
             with self.get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row  # هذا يجعل النتائج dict-like
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
                 user = cursor.fetchone()
-                logging.info(f"Retrieved user with ID: {user_id}")
-                return user
+                if user:
+                    user_dict = dict(user)  # تحويل row إلى dict عادي
+                    logging.info(f"Retrieved user with ID: {user_id}")
+                    return user_dict
+                return None
         except sqlite3.Error as e:
             logging.error(f"Error retrieving user by ID {user_id}: {e}")
             return None
+
 
     def get_user_by_email(self, email):
         """Retrieves a user by their email."""
@@ -149,3 +154,12 @@ class UserManager(Database):
         except sqlite3.Error as e:
             logging.error(f"Error validating password for user {user_id}: {e}")
             return False
+
+    def clear_all_users(self):
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM users")
+                conn.commit()
+        except sqlite3.Error as e:
+            logging.error(f"Error clearing users: {e}")

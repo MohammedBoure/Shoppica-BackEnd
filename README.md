@@ -1,58 +1,65 @@
 # Shoppica BackEnd
 
-Welcome to the backend repository for Shoppica, an e-commerce platform. This project contains the server-side logic, database structure, and documentation for the Shoppica application.
+This is the backend repository for Shoppica, an e-commerce platform, containing server-side logic, database structure, and API documentation.
 
 ## Project Structure
 
-The project is organized as follows:
-
-- **database/**: Contains the database models and the SQLite database file (`shop.db`).
-  - [Explore the database directory](./database/)
-- **docs/**: Contains documentation in multiple languages.
-  - [Arabic README](./docs/ar/README.md) (النسخة العربية)
-  - English documentation
-- **test/**: Contains test scripts for the database.
-- **commit**: Utility script for version control.
+- **database/**: Database models and SQLite file (`shop.db`).
+  - [Details](./database/)
+- **docs/**: Documentation in multiple languages.
+  - **ar/**: Arabic documentation.
+    - [README](./docs/ar/README.md)
+    - [Database](./docs/ar/database.md)
+  - **en/**: English documentation for APIs and database.
+- **test/**: Database test scripts.
+- **commit**: Version control utility.
 
 ## Getting Started
 
-1. **Clone the Repository**:
+1. **Clone Repository**:
    ```bash
    git clone <repository-url>
    cd Shoppica/BackEnd
    ```
 
 2. **Install Dependencies**:
-   Ensure you have Python installed, then install required packages:
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Database Setup**:
-   The database models are defined in the `database/` directory. The SQLite database file is located at `database/shop.db`. Refer to the [database documentation](./docs/ar/database.md) for details on the schema and usage.
+   SQLite database (`shop.db`) is in `database/`. See [database docs](./docs/en/database.md).
 
-4. **Running Tests**:
-   Tests are located in the `test/database/` directory. Run them using:
+4. **Run Tests**:
    ```bash
    python -m unittest test/database/test1.py
    ```
 
-## Documentation
+## API Documentation
 
-- For detailed information about the database structure, check the following:
-  - [Arabic Database Documentation](./docs/ar/database.md) (النسخة العربية)
-  - [English Database Documentation](./docs/en/database.md)
-- For Arabic general documentation, see the [Arabic README](./docs/ar/README.md).
+API details are in `/docs/en/`:
+- [Addresses](./docs/en/addresses.md): Manage user addresses.
+- [Cart Item](./docs/en/cart_item.md): Handle cart items.
+- [Category](./docs/en/category.md): Manage product categories.
+- [Category Discounts](./docs/en/category_discounts.md): Category-specific discounts.
+- [Discount Usage](./docs/en/discount_usage.md): Track discount usage.
+- [Discounts](./docs/en/discounts.md): Manage discount codes.
+- [Order Item](./docs/en/order_item.md): Manage order items.
+- [Orders](./docs/en/orders.md): Handle customer orders.
+- [Payment](./docs/en/payment.md): Process payments.
+- [Product Discounts](./docs/en/product_discounts.md): Product-specific discounts.
+- [Products](./docs/en/products.md): Manage product listings.
+- [Review](./docs/en/review.md): Manage product reviews.
+- [User](./docs/en/user.md): User account management.
 
 ## Contributing
 
-Contributions are welcome! Please follow these steps:
 1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Make your changes and commit (`git commit -m "Add feature"`).
-4. Push to the branch (`git push origin feature-branch`).
+2. Create a branch (`git checkout -b feature-branch`).
+3. Commit changes (`git commit -m "Add feature"`).
+4. Push branch (`git push origin feature-branch`).
 5. Create a pull request.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License.

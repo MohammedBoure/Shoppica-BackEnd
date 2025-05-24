@@ -1,7 +1,8 @@
 import sqlite3
 import logging
-from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timezone
+from passlib.hash import scrypt
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -49,7 +50,18 @@ class Database:
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
                 logging.info("Table 'users' checked/created.")
-
+                
+                cursor.execute("SELECT id FROM users WHERE email = ?", ('admin@gmail.com',))
+                admin_exists = cursor.fetchone()
+                if not admin_exists:
+                    # لم يوجد admin سابق، نضيفه
+                    admin_password_hash = self.hash_password('admin')
+                    cursor.execute('''
+                        INSERT INTO users (username, email, password_hash, is_admin, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', ('admin', 'admin@gmail.com', admin_password_hash, 1, self.get_current_timestamp()))
+                    logging.info("Default admin user created.")
+                    
                 # Create addresses table
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS addresses (
@@ -244,14 +256,12 @@ class Database:
     @staticmethod
     def hash_password(password):
         """Hashes a password using werkzeug.security."""
-        return generate_password_hash(password)
-
+        return scrypt.hash(password)
     @staticmethod
     def check_password(pwhash, password):
-        """Checks if a password matches the stored hash."""
-        return check_password_hash(pwhash, password)
+        return scrypt.verify(password, pwhash)
 
     @staticmethod
     def get_current_timestamp():
-        """Returns the current UTC timestamp in ISO8601 format."""
-        return datetime.utcnow().isoformat() + "Z"
+        """Returns the current UTC timestamp in ISO8601 format (timezone-aware)."""
+        return datetime.now(timezone.utc).isoformat()
