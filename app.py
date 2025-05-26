@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 import logging
@@ -7,9 +7,11 @@ import traceback
 from apis import *
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": [
+CORS(app,supports_credentials=True, resources={r"/api/*": {"origins": [
     "http://127.0.0.1:5500",
+    "http://localhost:3000",
 ]}})
+
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -34,6 +36,12 @@ app.register_blueprint(discounts_bp, url_prefix='/api')
 app.register_blueprint(discount_usages_bp, url_prefix='/api')
 app.register_blueprint(product_discounts_bp, url_prefix='/api')
 app.register_blueprint(category_discounts_bp, url_prefix='/api')
+
+
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        return '', 204
 
 @app.errorhandler(Exception)
 def handle_error(error):
