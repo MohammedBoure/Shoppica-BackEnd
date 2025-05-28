@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Optional
+from typing import List, Tuple, Optional
 
 class FileUtils:
     """Utility functions for file operations."""
@@ -13,9 +13,14 @@ class FileUtils:
         return f"{size_bytes:.1f}TB"
 
     @staticmethod
-    def get_file_stats(file_path: str) -> Tuple[Optional[int], Optional[int], bool, bool, str]:
-        """Return number of lines, size, test/documentation status, and module type."""
+    def get_file_stats(file_path: str, included_extensions: List[str]) -> Tuple[Optional[int], Optional[int], bool, bool]:
+        """Return number of lines, size, test/documentation status."""
         try:
+            # Check if file extension is included
+            _, ext = os.path.splitext(file_path)
+            if ext.lower() not in [e.lower() for e in included_extensions]:
+                return None, None, False, False
+
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
                 line_count = len(lines)
@@ -24,16 +29,10 @@ class FileUtils:
                 is_test_file = ('test_' in os.path.basename(file_path).lower() or
                                os.path.basename(file_path).lower().endswith('_test.py') or
                                '/tests/' in file_path.lower())
-                # Documentation detection
-                is_documented = any('"""' in line or "'''" in line for line in lines) if file_path.endswith('.py') else False
-                # Module type detection
-                module_type = "other"
-                if file_path.endswith('.py') and not is_test_file:
-                    content = ''.join(lines).lower()
-                    if any(keyword in content for keyword in ['@app.', 'route', 'endpoint', 'flask', 'fastapi']):
-                        module_type = "api"
-                    elif any(keyword in content for keyword in ['sqlalchemy', 'model', 'table', 'session', 'query']):
-                        module_type = "database"
-                return line_count, size, is_test_file, is_documented, module_type
-        except Exception:
-            return None, None, False, False, "other"
+                # Documentation detection (for code files only)
+                is_documented = False
+                if ext.lower() in ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.cs']:
+                    is_documented = any('"""' in line or "'''" in line or '//' in line or '/*' in line for line in lines)
+                return line_count, size, is_test_file, is_documented
+        except (OSError, UnicodeDecodeError):
+            return None, None, False, False

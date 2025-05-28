@@ -1,6 +1,6 @@
 import os
-from typing import List, Dict, Tuple
-from .file_utils import FileUtils
+from typing import List
+from file_utils import FileUtils
 
 class Colors:
     """ANSI color codes for console output."""
@@ -25,13 +25,13 @@ class DirectoryScanner:
         try:
             real_startpath = os.path.abspath(startpath)
             entries = os.listdir(real_startpath)
-            filtered_entries = [e for e in entries if e not in excluded_items]
+            filtered_entries = [e for e in entries if e not in self.config.excluded]
             dirs = sorted([d for d in filtered_entries if os.path.isdir(os.path.join(real_startpath, d))])
             files = sorted([f for f in filtered_entries if os.path.isfile(os.path.join(real_startpath, f))])
             all_entries = dirs + files
             if not is_root:
                 self.stats_collector.increment_folders()
-        except Exception as e:
+        except OSError as e:
             line = f"{prefix}└── [Error: {e}]"
             print(line)
             return [line]
@@ -64,9 +64,9 @@ class DirectoryScanner:
                 display = f"{prefix}{pointer}{entry:<{max_name_length}}"
                 display_clean = f"{prefix}{pointer}{entry:<{max_name_length}}"
                 if self.config.show_file_stats:
-                    lines, size, is_test, is_documented, module_type = FileUtils.get_file_stats(entry_path)
+                    lines, size, is_test, is_documented = FileUtils.get_file_stats(entry_path, self.config.included_extensions)
                     if lines is not None and size is not None:
-                        self.stats_collector.update_stats(entry, lines, size, is_test, is_documented, module_type)
+                        self.stats_collector.update_stats(entry, lines, size, is_test, is_documented)
                         folder_lines += lines
                         folder_size += size
                         folder_file_count += 1

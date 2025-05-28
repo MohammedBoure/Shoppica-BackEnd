@@ -1,13 +1,28 @@
 import os
-from .config import ProjectLensConfig
-from .directory_scanner import DirectoryScanner, Colors
-from .stats_collector import StatsCollector
-from .report_generator import ReportGenerator
-from .file_utils import FileUtils
+import sys
+
+# Add the parent directory to sys.path to support direct execution
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import ProjectLensConfig
+from directory_scanner import DirectoryScanner, Colors
+from stats_collector import StatsCollector
+from report_generator import ReportGenerator
+from file_utils import FileUtils
+from cli import parse_arguments
 
 def main():
     """Main function to run ProjectLens."""
+    # Parse CLI arguments and update config
     config = ProjectLensConfig()
+    args = parse_arguments()
+    config.search_path = os.path.abspath(args.path)  # Ensure absolute path
+    config.show_file_stats = args.show_stats
+    config.show_extended_stats = args.show_extended_stats
+    config.save_to_file = args.save_report
+    if args.extensions:
+        config.included_extensions = args.extensions.split(',')
+
     stats_collector = StatsCollector()
     scanner = DirectoryScanner(config, stats_collector)
     report_generator = ReportGenerator(config, stats_collector)
@@ -26,7 +41,7 @@ def main():
         filtered_entries = [e for e in entries if e not in config.excluded]
         dirs = sorted([d for d in filtered_entries if os.path.isdir(os.path.join(config.search_path, d))])
         files = sorted([f for f in filtered_entries if os.path.isfile(os.path.join(config.search_path, f))])
-    except Exception as e:
+    except OSError as e:
         print(f"{colors.RED}Error: {e}{colors.RESET}")
         return
 
@@ -43,16 +58,16 @@ def main():
         display = f"{pointer}{file_name:<{max_name_length}}"
         display_clean = f"{pointer}{file_name:<{max_name_length}}"
         if config.show_file_stats:
-            lines, size, is_test, is_documented, module_type = FileUtils.get_file_stats(file_path)
+            lines, size, is_test, is_documented = FileUtils.get_file_stats(file_path, config.included_extensions)
             if lines is not None and size is not None:
-                stats_collector.update_stats(file_name, lines, size, is_test, is_documented, module_type)
+                stats_collector.update_stats(file_name, lines, size, is_test, is_documented)
                 display += f" {colors.GRAY}[{lines} lines, {FileUtils.format_size(size)}]{colors.RESET}"
                 display_clean += f" [{lines} lines, {FileUtils.format_size(size)}]"
         print(display)
         output_lines.append(display_clean)
 
     if config.show_file_stats:
-        print(f"\n{stats_collector.get_summary()}")
+        print(f"\n{stats_collector.get_summary(config.show_extended_stats)}")
 
     report_generator.save_report(config.search_path, output_lines)
 

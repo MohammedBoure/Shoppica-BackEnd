@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
-from typing import Tuple, List
-from .file_utils import FileUtils
+from typing import List, Tuple
+from file_utils import FileUtils
 
 class StatsCollector:
     """Collects and processes project statistics."""
@@ -13,9 +13,8 @@ class StatsCollector:
         self.file_stats = defaultdict(lambda: {'count': 0, 'lines': 0, 'size': 0})
         self.largest_files: List[Tuple[str, int]] = []
         self.test_files = set()
-        self.api_endpoints = 0
-        self.database_endpoints = 0
-        self.documented_endpoints = 0
+        self.documented_files = 0
+        self.total_code_files = 0
 
     def increment_files(self):
         """Increment the file counter."""
@@ -25,7 +24,7 @@ class StatsCollector:
         """Increment the folder counter."""
         self.total_folders += 1
 
-    def update_stats(self, file_name: str, lines: int, size: int, is_test: bool, is_documented: bool, module_type: str):
+    def update_stats(self, file_name: str, lines: int, size: int, is_test: bool, is_documented: bool):
         """Update statistics for a file."""
         self.total_lines += lines
         self.total_size += size
@@ -38,15 +37,12 @@ class StatsCollector:
         self.largest_files = self.largest_files[:3]
         if is_test:
             self.test_files.add(file_name)
-        if file_name.endswith('.py') and not is_test:
-            if module_type == "api":
-                self.api_endpoints += 1
-            elif module_type == "database":
-                self.database_endpoints += 1
-            if is_documented:
-                self.documented_endpoints += 1
+        if is_documented:
+            self.documented_files += 1
+        if ext.lower() in ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.cs', '.go', '.rb']:
+            self.total_code_files += 1
 
-    def get_summary(self) -> str:
+    def get_summary(self, show_extended_stats: bool) -> str:
         """Generate a summary of statistics."""
         summary = f"Total folders: {self.total_folders}\n"
         summary += f"Total files: {self.total_files}\n"
@@ -57,19 +53,15 @@ class StatsCollector:
         for ext, stats in self.file_stats.items():
             summary += f"- {ext or 'no extension'}: {stats['count']} files ({stats['lines']:,} lines, {FileUtils.format_size(stats['size'])})\n"
         
-        summary += f"\nTop 3 largest files:\n"
-        for file_name, size in self.largest_files:
-            summary += f"- {file_name}: {FileUtils.format_size(size)}\n"
-        
-        total_modules = self.api_endpoints + self.database_endpoints
-        test_coverage = (len(self.test_files) / total_modules * 100) if total_modules > 0 else 0
-        api_coverage = (len(self.test_files) / self.api_endpoints * 100) if self.api_endpoints > 0 else 0
-        db_coverage = (len(self.test_files) / self.database_endpoints * 100) if self.database_endpoints > 0 else 0
-        summary += f"\nTest coverage for APIs: {len(self.test_files)}/{self.api_endpoints} modules ({api_coverage:.1f}%)\n"
-        summary += f"Test coverage for Database: {len(self.test_files)}/{self.database_endpoints} modules ({db_coverage:.1f}%)\n"
-        summary += f"Total test coverage: {len(self.test_files)}/{total_modules} modules ({test_coverage:.1f}%)\n"
-        
-        doc_coverage = (self.documented_endpoints / total_modules * 100) if total_modules > 0 else 0
-        summary += f"\nAPI Documentation coverage: {self.documented_endpoints}/{total_modules} ({doc_coverage:.1f}%)\n"
+        if show_extended_stats:
+            summary += f"\nTop 3 largest files:\n"
+            for file_name, size in self.largest_files:
+                summary += f"- {file_name}: {FileUtils.format_size(size)}\n"
+            
+            test_coverage = (len(self.test_files) / self.total_code_files * 100) if self.total_code_files > 0 else 0
+            summary += f"\nTest coverage: {len(self.test_files)}/{self.total_code_files} code files ({test_coverage:.1f}%)\n"
+            
+            doc_coverage = (self.documented_files / self.total_code_files * 100) if self.total_code_files > 0 else 0
+            summary += f"Documentation coverage: {self.documented_files}/{self.total_code_files} code files ({doc_coverage:.1f}%)\n"
         
         return summary
