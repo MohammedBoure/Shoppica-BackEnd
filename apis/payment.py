@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from database import PaymentManager
+from .auth import admin_required, session_required
 import logging
 
 payments_bp = Blueprint('payments', __name__)
@@ -11,6 +12,7 @@ payment_manager = PaymentManager()
 logging.basicConfig(level=logging.INFO)
 
 @payments_bp.route('/payments', methods=['POST'])
+@session_required
 def add_payment():
     """API to add a new payment."""
     data = request.get_json()
@@ -28,6 +30,7 @@ def add_payment():
     return jsonify({'error': 'Failed to add payment'}), 500
 
 @payments_bp.route('/payments/<int:payment_id>', methods=['GET'])
+@session_required
 def get_payment_by_id(payment_id):
     """API to retrieve a payment by ID."""
     payment = payment_manager.get_payment_by_id(payment_id)
@@ -43,6 +46,7 @@ def get_payment_by_id(payment_id):
     return jsonify({'error': 'Payment not found'}), 404
 
 @payments_bp.route('/payments/order/<int:order_id>', methods=['GET'])
+@session_required
 def get_payments_by_order(order_id):
     """API to retrieve all payments for an order."""
     payments = payment_manager.get_payments_by_order(order_id)
@@ -61,6 +65,7 @@ def get_payments_by_order(order_id):
     return jsonify({'payments': [], 'message': 'No payments found for this order'}), 200
 
 @payments_bp.route('/payments/<int:payment_id>', methods=['PUT'])
+@admin_required
 def update_payment(payment_id):
     """API to update payment details."""
     data = request.get_json()
@@ -74,6 +79,7 @@ def update_payment(payment_id):
     return jsonify({'error': 'Failed to update payment'}), 400
 
 @payments_bp.route('/payments/<int:payment_id>', methods=['DELETE'])
+@admin_required
 def delete_payment(payment_id):
     """API to delete a payment by ID."""
     success = payment_manager.delete_payment(payment_id)
@@ -82,6 +88,7 @@ def delete_payment(payment_id):
     return jsonify({'error': 'Payment not found or failed to delete'}), 404
 
 @payments_bp.route('/payments', methods=['GET'])
+@admin_required
 def get_payments():
     """API to retrieve payments with pagination."""
     page = request.args.get('page', 1, type=int)

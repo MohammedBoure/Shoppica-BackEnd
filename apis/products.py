@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
 from database import ProductManager
-from flask_jwt_extended import jwt_required
 from .auth import admin_required
 import logging
 
@@ -50,7 +49,7 @@ def get_product_by_id(product_id):
     """API to retrieve a product by ID."""
     try:
         product = product_manager.get_product_by_id(product_id)
-        if product and product['is_active'] == 1:  # Only return active products
+        if product and product['is_active'] == 1:
             logger.info(f"Retrieved product: product_id={product_id}")
             return jsonify({
                 'id': product['id'],
@@ -85,7 +84,7 @@ def get_products_by_category(category_id):
                 'image_url': product['image_url'],
                 'is_active': product['is_active'],
                 'created_at': product['created_at']
-            } for product in products if product['is_active'] == 1  # Only include active products
+            } for product in products if product['is_active'] == 1
         ]
         logger.info(f"Retrieved {len(products_list)} products for category_id={category_id}")
         return jsonify({'products': products_list}), 200
@@ -158,7 +157,7 @@ def get_products():
                 'image_url': product['image_url'],
                 'is_active': product['is_active'],
                 'created_at': product['created_at']
-            } for product in products if product['is_active'] == 1  # Only include active products
+            } for product in products if product['is_active'] == 1
         ]
         logger.info(f"Retrieved {len(products_list)} products for page={page}, per_page={per_page}")
         return jsonify({

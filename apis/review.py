@@ -1,7 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from database import ReviewManager
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from .auth import admin_required
+from .auth import admin_required, session_required
 import logging
 
 reviews_bp = Blueprint('reviews', __name__)
@@ -13,12 +12,11 @@ review_manager = ReviewManager()
 logging.basicConfig(level=logging.INFO)
 
 @reviews_bp.route('/reviews', methods=['POST'])
-@jwt_required()
+@session_required
 def add_review():
     """API to add a new review."""
-    current_user_id = int(get_jwt_identity())  # Convert to int as identity is a string
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     data = request.get_json()
     user_id = data.get('user_id')
@@ -72,12 +70,11 @@ def get_reviews_by_product(product_id):
     return jsonify({'reviews': [], 'message': 'No reviews found for this product'}), 200
 
 @reviews_bp.route('/reviews/<int:review_id>', methods=['PUT'])
-@jwt_required()
+@session_required
 def update_review(review_id):
     """API to update review details."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     review = review_manager.get_review_by_id(review_id)
     if not review:
@@ -97,12 +94,11 @@ def update_review(review_id):
     return jsonify({'error': 'Failed to update review'}), 400
 
 @reviews_bp.route('/reviews/<int:review_id>', methods=['DELETE'])
-@jwt_required()
+@session_required
 def delete_review(review_id):
     """API to delete a review by ID."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     review = review_manager.get_review_by_id(review_id)
     if not review:

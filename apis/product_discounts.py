@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
 from database import ProductDiscountManager
-from flask_jwt_extended import jwt_required, get_jwt
 from .auth import admin_required
 import logging
 from datetime import datetime

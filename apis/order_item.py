@@ -1,7 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from database import OrderItemManager, OrderManager
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from .auth import admin_required
+from .auth import admin_required, session_required
 import logging
 
 order_items_bp = Blueprint('order_items', __name__)
@@ -32,12 +31,11 @@ def add_order_item():
     return jsonify({'error': 'Failed to add order item'}), 500
 
 @order_items_bp.route('/order_items/<int:order_item_id>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_order_item_by_id(order_item_id):
     """API to retrieve an order item by ID."""
-    current_user_id = int(get_jwt_identity())  # Convert to int as identity is a string
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     order_item = order_item_manager.get_order_item_by_id(order_item_id)
     if not order_item:
@@ -59,12 +57,11 @@ def get_order_item_by_id(order_item_id):
     }), 200
 
 @order_items_bp.route('/order_items/order/<int:order_id>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_order_items_by_order(order_id):
     """API to retrieve all order items for an order."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     # Check if the user owns the order or is admin
     order = order_manager.get_order_by_id(order_id)

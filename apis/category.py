@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
 from database import CategoryManager
-from flask_jwt_extended import jwt_required
 from .auth import admin_required
 import logging
 
+# Corrected Blueprint definition to use __name__
 categories_bp = Blueprint('categories', __name__)
 
 # Initialize CategoryManager
@@ -28,6 +28,7 @@ def add_category():
         return jsonify({'message': 'Category added successfully', 'category_id': category_id}), 201
     return jsonify({'error': 'Failed to add category'}), 500
 
+# Corrected route syntax for URL variables
 @categories_bp.route('/categories/<int:category_id>', methods=['GET'])
 def get_category_by_id(category_id):
     """API to retrieve a category by ID."""
@@ -56,6 +57,7 @@ def get_categories_by_parent():
         return jsonify({'categories': categories_list}), 200
     return jsonify({'categories': [], 'message': 'No categories found for this parent'}), 200
 
+# Corrected route syntax
 @categories_bp.route('/categories/<int:category_id>', methods=['PUT'])
 @admin_required
 def update_category(category_id):
@@ -69,6 +71,7 @@ def update_category(category_id):
         return jsonify({'message': 'Category updated successfully'}), 200
     return jsonify({'error': 'Failed to update category'}), 400
 
+# Corrected route syntax
 @categories_bp.route('/categories/<int:category_id>', methods=['DELETE'])
 @admin_required
 def delete_category(category_id):
@@ -83,8 +86,8 @@ def get_categories():
     """API to retrieve categories with pagination."""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
-
     categories, total = category_manager.get_categories(page, per_page)
+    
     categories_list = [
         {
             'id': category['id'],
@@ -92,6 +95,7 @@ def get_categories():
             'parent_id': category['parent_id']
         } for category in categories
     ]
+    
     return jsonify({
         'categories': categories_list,
         'total': total,

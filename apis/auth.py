@@ -1,17 +1,32 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import (
-    create_access_token, jwt_required,
-    get_jwt_identity, get_jwt
-)
+from flask import Blueprint, request, jsonify, session
 from database import UserManager
 from functools import wraps
 
 auth_bp = Blueprint('auth', __name__)
 user_manager = UserManager()
 
+def session_required(fn):
+    """Decorator to ensure user is authenticated via session."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
+def admin_required(fn):
+    """Decorator to restrict route access to admins only."""
+    @wraps(fn)
+    @session_required
+    def wrapper(*args, **kwargs):
+        if not session.get('is_admin', False):
+            return jsonify({'error': 'Admin privileges required'}), 403
+        return fn(*args, **kwargs)
+    return wrapper
+
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """Authenticate user and return JWT token."""
+    """Authenticate user and store session."""
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
@@ -20,13 +35,11 @@ def login():
         return jsonify({'error': 'Email and password are required'}), 400
 
     user = user_manager.get_user_by_email(email)
-    if user and user_manager.validate_password(user['id'], password):  # Ensure this compares SHA256 hashes
-        access_token = create_access_token(
-            identity=str(user['id']),
-            additional_claims={'is_admin': bool(user['is_admin'])}
-        )
+    if user and user_manager.validate_password(user['id'], password):
+        # Store user info in session
+        session['user_id'] = user['id']
+        session['is_admin'] = user['is_admin']
         return jsonify({
-            'access_token': access_token,
             'user': {
                 'id': user['id'],
                 'username': user['username'],
@@ -38,11 +51,11 @@ def login():
     return jsonify({'error': 'Invalid credentials'}), 401
 
 @auth_bp.route('/me', methods=['GET'])
-@jwt_required()
+@session_required
 def get_current_user():
     """Return details of the currently authenticated user."""
-    current_user_id = get_jwt_identity()
-    user = user_manager.get_user_by_id(int(current_user_id))
+    user_id = session['user_id']
+    user = user_manager.get_user_by_id(int(user_id))
     if user:
         return jsonify({
             'id': user['id'],
@@ -55,13 +68,9 @@ def get_current_user():
         }), 200
     return jsonify({'error': 'User not found'}), 404
 
-def admin_required(fn):
-    """Decorator to restrict route access to admins only."""
-    @wraps(fn)
-    @jwt_required()
-    def wrapper(*args, **kwargs):
-        claims = get_jwt()
-        if not claims.get('is_admin', False):
-            return jsonify({'error': 'Admin privileges required'}), 403
-        return fn(*args, **kwargs)
-    return wrapper
+@auth_bp.route('/logout', methods=['POST'])
+@session_required
+def logout():
+    """Log out the current user by clearing the session."""
+    session.clear()
+    return jsonify({'message': 'Logged out successfully'}), 200

@@ -1,7 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from database import OrderManager
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from .auth import admin_required
+from .auth import session_required, admin_required
 import logging
 
 orders_bp = Blueprint('orders', __name__)
@@ -13,14 +12,16 @@ order_manager = OrderManager()
 logging.basicConfig(level=logging.INFO)
 
 @orders_bp.route('/orders', methods=['POST'])
-@jwt_required()
+@session_required
 def add_order():
     """API to add a new order."""
-    current_user_id = int(get_jwt_identity())  # Convert to int as identity is a string
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON payload'}), 400
+        
     user_id = data.get('user_id')
     shipping_address_id = data.get('shipping_address_id')
     total_price = data.get('total_price')
@@ -39,12 +40,11 @@ def add_order():
     return jsonify({'error': 'Failed to add order'}), 500
 
 @orders_bp.route('/orders/<int:order_id>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_order_by_id(order_id):
     """API to retrieve an order by ID."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     order = order_manager.get_order_by_id(order_id)
     if not order:
@@ -60,41 +60,41 @@ def get_order_by_id(order_id):
         'status': order['status'],
         'total_price': order['total_price'],
         'shipping_address_id': order['shipping_address_id'],
-        'created_at': order['created_at']
+        'created_at': order.get('created_at', '')
     }), 200
 
 @orders_bp.route('/orders/user/<int:user_id>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_orders_by_user(user_id):
     """API to retrieve all orders for a user."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     # Allow access if requesting own orders or if admin
     if user_id != current_user_id and not is_admin:
         return jsonify({'error': 'Unauthorized to view orders for another user'}), 403
 
     orders = order_manager.get_orders_by_user(user_id)
-    if orders:
-        orders_list = [
-            {
-                'id': order['id'],
-                'user_id': order['user_id'],
-                'status': order['status'],
-                'total_price': order['total_price'],
-                'shipping_address_id': order['shipping_address_id'],
-                'created_at': order['created_at']
-            } for order in orders
-        ]
-        return jsonify({'orders': orders_list}), 200
-    return jsonify({'orders': [], 'message': 'No orders found for this user'}), 200
+    orders_list = [
+        {
+            'id': order['id'],
+            'user_id': order['user_id'],
+            'status': order['status'],
+            'total_price': order['total_price'],
+            'shipping_address_id': order['shipping_address_id'],
+            'created_at': order.get('created_at', '')
+        } for order in orders or []
+    ]
+    return jsonify({'orders': orders_list, 'message': 'No orders found for this user' if not orders_list else ''}), 200
 
 @orders_bp.route('/orders/<int:order_id>', methods=['PUT'])
 @admin_required
 def update_order(order_id):
     """API to update order details."""
     data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON payload'}), 400
+        
     status = data.get('status')
     total_price = data.get('total_price')
     shipping_address_id = data.get('shipping_address_id')
@@ -128,12 +128,12 @@ def get_orders():
             'status': order['status'],
             'total_price': order['total_price'],
             'shipping_address_id': order['shipping_address_id'],
-            'created_at': order['created_at']
-        } for order in orders
+            'created_at': order.get('created_at', '')
+        } for order in orders or []
     ]
     return jsonify({
         'orders': orders_list,
-        'total': total,
+        'total': total or 0,
         'page': page,
         'per_page': per_page
     }), 200

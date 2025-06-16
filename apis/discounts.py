@@ -1,7 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from database import DiscountManager
-from flask_jwt_extended import jwt_required, get_jwt
-from .auth import admin_required
+from .auth import admin_required, session_required
 import logging
 
 discounts_bp = Blueprint('discounts', __name__)
@@ -71,7 +70,7 @@ def get_discount_by_id(discount_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @discounts_bp.route('/discounts/code/<string:code>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_discount_by_code(code):
     """API to retrieve a discount by code."""
     try:
@@ -94,7 +93,7 @@ def get_discount_by_code(code):
         return jsonify({'error': 'Internal server error'}), 500
 
 @discounts_bp.route('/discounts/valid/<string:code>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_valid_discount(code):
     """API to retrieve a valid discount by code."""
     try:

@@ -1,7 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from database import DiscountUsageManager
-from flask_jwt_extended import jwt_required, get_jwt
-from .auth import admin_required
+from .auth import session_required, admin_required
 import logging
 
 discount_usages_bp = Blueprint('discount_usages', __name__)
@@ -14,14 +13,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @discount_usages_bp.route('/discount_usages', methods=['POST'])
-@jwt_required()
+@session_required
 def add_discount_usage():
     """API to add a new discount usage."""
     try:
         data = request.get_json()
+        if not data:
+            logger.warning("Invalid JSON payload")
+            return jsonify({'error': 'Invalid JSON payload'}), 400
+
         discount_id = data.get('discount_id')
         user_id = data.get('user_id')
-        current_user_id = get_jwt()['sub']  # Get user_id from JWT token
+        current_user_id = int(session['user_id'])
 
         if not discount_id or not user_id:
             logger.warning("Missing required fields: discount_id or user_id")
@@ -35,7 +38,7 @@ def add_discount_usage():
             logger.warning(f"Invalid user_id: {user_id}")
             return jsonify({'error': 'User ID must be a positive integer'}), 400
 
-        if str(user_id) != current_user_id:
+        if user_id != current_user_id:
             logger.warning(f"Unauthorized attempt to add discount usage: user_id={user_id}, current_user_id={current_user_id}")
             return jsonify({'error': 'Unauthorized: User ID does not match authenticated user'}), 403
 
@@ -61,7 +64,7 @@ def get_discount_usage_by_id(usage_id):
                 'id': usage['id'],
                 'discount_id': usage['discount_id'],
                 'user_id': usage['user_id'],
-                'used_at': usage['used_at']
+                'used_at': usage.get('used_at', '')
             }), 200
         logger.warning(f"Discount usage not found: usage_id={usage_id}")
         return jsonify({'error': 'Discount usage not found'}), 404
@@ -80,8 +83,8 @@ def get_discount_usages_by_discount(discount_id):
                 'id': usage['id'],
                 'discount_id': usage['discount_id'],
                 'user_id': usage['user_id'],
-                'used_at': usage['used_at']
-            } for usage in usages
+                'used_at': usage.get('used_at', '')
+            } for usage in usages or []
         ]
         logger.info(f"Retrieved {len(usages_list)} discount usages for discount_id={discount_id}")
         return jsonify({'discount_usages': usages_list}), 200
@@ -90,13 +93,13 @@ def get_discount_usages_by_discount(discount_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @discount_usages_bp.route('/discount_usages/user/<int:user_id>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_discount_usages_by_user(user_id):
     """API to retrieve all discount usages for a user."""
     try:
-        current_user_id = get_jwt()['sub']  # Get user_id from JWT token
+        current_user_id = int(session['user_id'])
 
-        if str(user_id) != current_user_id:
+        if user_id != current_user_id:
             logger.warning(f"Unauthorized attempt to access discount usages: user_id={user_id}, current_user_id={current_user_id}")
             return jsonify({'error': 'Unauthorized: User ID does not match authenticated user'}), 403
 
@@ -106,8 +109,8 @@ def get_discount_usages_by_user(user_id):
                 'id': usage['id'],
                 'discount_id': usage['discount_id'],
                 'user_id': usage['user_id'],
-                'used_at': usage['used_at']
-            } for usage in usages
+                'used_at': usage.get('used_at', '')
+            } for usage in usages or []
         ]
         logger.info(f"Retrieved {len(usages_list)} discount usages for user_id={user_id}")
         return jsonify({'discount_usages': usages_list}), 200
@@ -144,14 +147,14 @@ def get_discount_usages():
                 'id': usage['id'],
                 'discount_id': usage['discount_id'],
                 'user_id': usage['user_id'],
-                'used_at': usage['used_at'],
-                'discount_code': usage['code']
-            } for usage in usages
+                'used_at': usage.get('used_at', ''),
+                'discount_code': usage.get('code', '')
+            } for usage in usages or []
         ]
         logger.info(f"Retrieved {len(usages_list)} discount usages for page={page}, per_page={per_page}")
         return jsonify({
             'discount_usages': usages_list,
-            'total': total,
+            'total': total or 0,
             'page': page,
             'per_page': per_page
         }), 200

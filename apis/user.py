@@ -1,10 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from database import UserManager
-from flask_jwt_extended import (
-    create_access_token, jwt_required,
-    get_jwt_identity, get_jwt
-)
-from .auth import admin_required
+from .auth import admin_required, session_required
 import logging
 
 users_bp = Blueprint('users', __name__)
@@ -14,7 +10,6 @@ user_manager = UserManager()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-
 
 @users_bp.route('/users', methods=['POST'])
 def add_user():
@@ -35,12 +30,11 @@ def add_user():
     return jsonify({'error': 'Failed to add user'}), 500
 
 @users_bp.route('/users/<int:user_id>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_user_by_id(user_id):
     """API to retrieve a user by ID."""
-    current_user_id = int(get_jwt_identity())  # Convert to int as identity is a string
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     # Allow access if user is requesting their own data or is an admin
     if current_user_id != user_id and not is_admin:
@@ -60,12 +54,11 @@ def get_user_by_id(user_id):
     return jsonify({'error': 'User not found'}), 404
 
 @users_bp.route('/users/email/<string:email>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_user_by_email(email):
     """API to retrieve a user by email."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     user = user_manager.get_user_by_email(email)
     if not user:
@@ -86,12 +79,11 @@ def get_user_by_email(email):
     }), 200
 
 @users_bp.route('/users/username/<string:username>', methods=['GET'])
-@jwt_required()
+@session_required
 def get_user_by_username(username):
     """API to retrieve a user by username."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     user = user_manager.get_user_by_username(username)
     if not user:
@@ -112,12 +104,11 @@ def get_user_by_username(username):
     }), 200
 
 @users_bp.route('/users/<int:user_id>', methods=['PUT'])
-@jwt_required()
+@session_required
 def update_user(user_id):
     """API to update user details."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     # Allow update if user is updating their own data or is an admin
     if current_user_id != user_id and not is_admin:
@@ -170,12 +161,11 @@ def get_users():
     }), 200
 
 @users_bp.route('/users/<int:user_id>/validate-password', methods=['POST'])
-@jwt_required()
+@session_required
 def validate_password(user_id):
     """API to validate a user's password."""
-    current_user_id = int(get_jwt_identity())
-    claims = get_jwt()
-    is_admin = claims.get('is_admin', False)
+    current_user_id = int(session['user_id'])
+    is_admin = session.get('is_admin', False)
 
     # Allow validation if user is validating their own password or is an admin
     if current_user_id != user_id and not is_admin:
