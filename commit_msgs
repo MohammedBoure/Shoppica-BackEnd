@@ -1,14 +1,4 @@
-v0.3.0: JWT auth, API separation, admin auto-create, bcrypt hash, tests, and docs updates
-
--------------
-
-refactor(auth): migrate from JWT to session-based auth, add logout endpoint and session decorators
-
-- Replaced JWT authentication with session-based authentication across all auth APIs
-- Added a logout endpoint in apis/auth.py to handle user sign-out
-- Implemented a reusable decorator for session management and protected route access
-- Improved session creation and handling for developer convenience
 
 -----
 
-correct commit_msgs
+docs(changelog): update changelog for version 0.4.0 and add missing release date

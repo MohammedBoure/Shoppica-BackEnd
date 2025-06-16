@@ -1,3 +1,18 @@
+# Changelog
+
+## [0.4.0] - 2025-06-16
+
+### Changed
+- Migrated from **JWT-based authentication** to **session-based authentication** for improved security and better server-side control.
+
+### Added
+- Added a **logout endpoint** in `apis/auth.py` to allow users to sign out and invalidate their sessions.
+- Implemented **session decorators** to protect routes and simplify session validation logic.
+
+### Improved
+- Improved **session creation and handling** to streamline developer experience and ensure more reliable authentication flow.
+
+
 ## [0.3.0] - 2025-05-24
 
 ### Added
