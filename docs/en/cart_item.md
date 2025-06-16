@@ -1,394 +1,351 @@
 # Cart Items API Documentation
 
-This document provides detailed information about the Cart Items API endpoints defined in `admin_apis/cart_items.py`. These endpoints manage items in a user's shopping cart within an e-commerce platform, including adding, retrieving, updating, and deleting cart items. Authentication and authorization are enforced using JWT (JSON Web Tokens) with specific roles (`@jwt_required` for user authentication and `@admin_required` for admin-only operations).
-
-## Base URL
-All endpoints are prefixed with `/api`. For example, `/cart_items` is accessed as `/api/cart_items`.
+This document provides detailed information about the Cart Items API endpoints implemented in the Flask Blueprint `cart_items`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- **JWT Token**: Required for all endpoints. Include the token in the `Authorization` header as `Bearer <token>`.
-- **User Access**: Endpoints marked with `@jwt_required()` allow authenticated users to manage their own cart items (based on `user_id` matching `get_jwt_identity()`) or admins to manage any cart items.
-- **Admin Privileges**: The endpoint marked with `@admin_required` (`GET /api/cart_items`) requires a JWT token with `is_admin: true`.
-- **Public Access**: None of the endpoints are publicly accessible without authentication.
+- Endpoints for adding (`POST /cart/items`), retrieving a user's own cart items (`GET /cart/items`), retrieving a specific cart item (`GET /cart/items/<int:cart_item_id>`), updating a cart item (`PUT /cart/items/<int:cart_item_id>`), and deleting a cart item (`DELETE /cart/items/<int:cart_item_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
+- The custom `@check_cart_item_ownership` decorator is used for `GET`, `PUT`, and `DELETE` operations on specific cart items, ensuring that the authenticated user owns the cart item (`user_id` matches `session['user_id']`) or is an admin (`is_admin` is `True`).
+- Endpoints for retrieving all cart items for a specific user (`GET /admin/cart_items/user/<int:user_id>`) and retrieving all cart items with pagination (`GET /admin/cart_items`) require admin privileges, enforced by the `@admin_required` decorator.
+- The `CartItemManager` class handles all database interactions for cart item-related operations.
 
-## Endpoints
+---
 
-### 1. Add Cart Item
-- **Endpoint**: `POST /api/cart_items`
-- **Description**: Adds a new item to a user's shopping cart. Only accessible to the user themselves or admins.
-- **Authorization**: Requires `@jwt_required()`. Users can only add items to their own cart unless they are admins (`is_admin: true`).
-- **Input**:
+## 1. Add a New Cart Item
+### Endpoint: `/cart/items`
+### Method: `POST`
+### Description
+Adds a new item to the authenticated user's cart. The `user_id` is automatically taken from the session, ensuring users can only add items to their own cart.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+
+### Inputs (Request Body)
+- **Content-Type**: `application/json`
+- **Required Fields**:
+  - `product_id` (integer): The ID of the product to add to the cart.
+  - `quantity` (integer): The quantity of the product to add.
+  
+**Example Request Body**:
+```json
+{
+  "product_id": 123,
+  "quantity": 2
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 201):
   ```json
   {
-    "user_id": <integer>,     // Required: ID of the user
-    "product_id": <integer>,  // Required: ID of the product
-    "quantity": <integer>     // Required: Quantity of the product
+    "id": 456,
+    "user_id": 789,
+    "product_id": 123,
+    "quantity": 2
   }
   ```
-- **Output**:
-  - **Success (201)**:
+- **Error Responses**:
+  - **HTTP 400**: Missing or invalid request body, or missing required fields (`product_id` or `quantity`).
     ```json
     {
-      "message": "Cart item added successfully",
-      "cart_item_id": <integer>
+      "error": "product_id and quantity are required"
     }
     ```
-  - **Error (400)**:
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
     ```json
     {
-      "error": "User ID, product ID, and quantity are required"
+      "error": "Authentication required"
     }
     ```
-  - **Error (403)**:
+  - **HTTP 500**: Server error when failing to add the cart item to the database.
     ```json
     {
-      "error": "Unauthorized to add cart item for another user"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Failed to add cart item"
-    }
-    ```
-  - **Error (401, if no valid JWT)**:
-    ```json
-    {
-      "msg": "Missing Authorization Header"
+      "error": "An internal server error occurred"
     }
     ```
 
-### 2. Get Cart Item by ID
-- **Endpoint**: `GET /api/cart_items/<cart_item_id>`
-- **Description**: Retrieves a cart item by its ID. Only accessible to the cart item’s owner or admins.
-- **Authorization**: Requires `@jwt_required()`. Users can only access their own cart items unless they are admins (`is_admin: true`).
-- **Input**: URL parameter `cart_item_id` (integer).
-- **Output**:
-  - **Success (200)**:
+---
+
+## 2. Get User's Cart Items
+### Endpoint: `/cart/items`
+### Method: `GET`
+### Description
+Retrieves all cart items for the currently authenticated user.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+
+### Inputs
+- None.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  [
+    {
+      "id": 456,
+      "user_id": 789,
+      "product_id": 123,
+      "quantity": 2
+    }
+  ]
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  []
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
     ```json
     {
-      "id": <integer>,
-      "user_id": <integer>,
-      "product_id": <integer>,
-      "quantity": <integer>,
-      "added_at": <string>
+      "error": "Authentication required"
     }
     ```
-  - **Error (404)**:
+  - **HTTP 500**: Server error when retrieving cart items.
     ```json
     {
-      "error": "Cart item not found"
+      "error": "An internal server error occurred"
     }
     ```
-  - **Error (403)**:
+
+---
+
+## 3. Get Cart Item by ID
+### Endpoint: `/cart/items/<int:cart_item_id>`
+### Method: `GET`
+### Description
+Retrieves a specific cart item by its ID. Only the user who owns the cart item or an admin can access it.
+
+### Authentication
+- Requires a valid session (`@session_required`) and ownership verification (`@check_cart_item_ownership`).
+
+### Inputs (URL Parameters)
+- `cart_item_id` (integer): The ID of the cart item to retrieve.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "id": 456,
+    "user_id": 789,
+    "product_id": 123,
+    "quantity": 2
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Unauthorized access to the cart item (non-owner and non-admin user).
     ```json
     {
       "error": "Unauthorized access to this cart item"
     }
     ```
-  - **Error (401, if no valid JWT)**:
+  - **HTTP 404**: Cart item with the specified ID does not exist.
     ```json
     {
-      "msg": "Missing Authorization Header"
+      "error": "Cart item not found"
     }
     ```
+  - **HTTP 500**: Server error when retrieving the cart item (handled by `@check_cart_item_ownership`).
 
-### 3. Get Cart Items by User
-- **Endpoint**: `GET /api/cart_items/user/<user_id>`
-- **Description**: Retrieves all cart items for a specific user. Only accessible to the user themselves or admins.
-- **Authorization**: Requires `@jwt_required()`. Users can only access their own cart items unless they are admins (`is_admin: true`).
-- **Input**: URL parameter `user_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "cart_items": [
-        {
-          "id": <integer>,
-          "user_id": <integer>,
-          "product_id": <integer>,
-          "quantity": <integer>,
-          "added_at": <string>,
-          "product_name": <string>,
-          "product_price": <float>
-        },
-        ...
-      ]
-    }
-    ```
-    or, if no cart items:
-    ```json
-    {
-      "cart_items": [],
-      "message": "No cart items found for this user"
-    }
-    ```
-  - **Error (403)**:
-    ```json
-    {
-      "error": "Unauthorized to view cart items for another user"
-    }
-    ```
-  - **Error (401, if no valid JWT)**:
-    ```json
-    {
-      "msg": "Missing Authorization Header"
-    }
-    ```
+---
 
-### 4. Update Cart Item
-- **Endpoint**: `PUT /api/cart_items/<cart_item_id>`
-- **Description**: Updates a cart item’s details (e.g., quantity). Only accessible to the cart item’s owner or admins.
-- **Authorization**: Requires `@jwt_required()`. Users can only update their own cart items unless they are admins (`is_admin: true`).
-- **Input**:
+## 4. Update Cart Item
+### Endpoint: `/cart/items/<int:cart_item_id>`
+### Method: `PUT`
+### Description
+Updates the quantity of a specific cart item. Only the user who owns the cart item or an admin can update it.
+
+### Authentication
+- Requires a valid session (`@session_required`) and ownership verification (`@check_cart_item_ownership`).
+
+### Inputs
+- **URL Parameters**:
+  - `cart_item_id` (integer): The ID of the cart item to update.
+- **Request Body** (Content-Type: `application/json`):
+  - **Required Fields**:
+    - `quantity` (integer): The updated quantity of the product (must be non-negative).
+
+**Example Request Body**:
+```json
+{
+  "quantity": 3
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 200):
   ```json
   {
-    "quantity": <integer>     // Required: New quantity of the product
+    "id": 456,
+    "user_id": 789,
+    "product_id": 123,
+    "quantity": 3
   }
   ```
-- **Output**:
-  - **Success (200)**:
+- **Error Responses**:
+  - **HTTP 400**: Missing or invalid `quantity` (not an integer or negative).
     ```json
     {
-      "message": "Cart item updated successfully"
+      "error": "A valid quantity is required"
     }
     ```
-  - **Error (400)**:
+  - **HTTP 403**: Unauthorized access to the cart item (non-owner and non-admin user).
     ```json
     {
-      "error": "Failed to update cart item"
+      "error": "Unauthorized access to this cart item"
     }
     ```
-  - **Error (404)**:
+  - **HTTP 404**: Cart item with the specified ID does not exist.
     ```json
     {
       "error": "Cart item not found"
     }
     ```
-  - **Error (403)**:
+  - **HTTP 500**: Server error when updating the cart item.
     ```json
     {
-      "error": "Unauthorized to update this cart item"
-    }
-    ```
-  - **Error (401, if no valid JWT)**:
-    ```json
-    {
-      "msg": "Missing Authorization Header"
+      "error": "An internal server error occurred"
     }
     ```
 
-### 5. Delete Cart Item
-- **Endpoint**: `DELETE /api/cart_items/<cart_item_id>`
-- **Description**: Deletes a cart item by ID. Only accessible to the cart item’s owner or admins.
-- **Authorization**: Requires `@jwt_required()`. Users can only delete their own cart items unless they are admins (`is_admin: true`).
-- **Input**: URL parameter `cart_item_id` (integer).
-- **Output**:
-  - **Success (200)**:
+---
+
+## 5. Delete Cart Item
+### Endpoint: `/cart/items/<int:cart_item_id>`
+### Method: `DELETE`
+### Description
+Deletes a specific cart item by its ID. Only the user who owns the cart item or an admin can delete it.
+
+### Authentication
+- Requires a valid session (`@session_required`) and ownership verification (`@check_cart_item_ownership`).
+
+### Inputs
+- **URL Parameters**:
+  - `cart_item_id` (integer): The ID of the cart item to delete.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Cart item deleted successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Unauthorized access to the cart item (non-owner and non-admin user).
     ```json
     {
-      "message": "Cart item deleted successfully"
+      "error": "Unauthorized access to this cart item"
     }
     ```
-  - **Error (404)**:
-    ```json
-    {
-      "error": "Cart item not found"
-    }
-    ```
-    or
+  - **HTTP 404**: Cart item with the specified ID does not exist or failed to delete.
     ```json
     {
       "error": "Cart item not found or failed to delete"
     }
     ```
-  - **Error (403)**:
+  - **HTTP 500**: Server error when deleting the cart item.
     ```json
     {
-      "error": "Unauthorized to delete this cart item"
-    }
-    ```
-  - **Error (401, if no valid JWT)**:
-    ```json
-    {
-      "msg": "Missing Authorization Header"
+      "error": "An internal server error occurred"
     }
     ```
 
-### 6. Get All Cart Items (Paginated)
-- **Endpoint**: `GET /api/cart_items?page=<page>&per_page=<per_page>`
-- **Description**: Retrieves a paginated list of all cart items across all users (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
-  - Query parameters:
-    - `page` (integer, default: 1)
-    - `per_page` (integer, default: 20)
-- **Output**:
-  - **Success (200)**:
-    ```json
+---
+
+## 6. Get Cart Items by User (Admin Only)
+### Endpoint: `/admin/cart_items/user/<int:user_id>`
+### Method: `GET`
+### Description
+Retrieves all cart items for a specific user. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (URL Parameters)
+- `user_id` (integer): The ID of the user whose cart items are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  [
     {
-      "cart_items": [
-        {
-          "id": <integer>,
-          "user_id": <integer>,
-          "product_id": <integer>,
-          "quantity": <integer>,
-          "added_at": <string>,
-          "product_name": <string>,
-          "product_price": <float>
-        },
-        ...
-      ],
-      "total": <integer>,
-      "page": <integer>,
-      "per_page": <integer>
+      "id": 456,
+      "user_id": 789,
+      "product_id": 123,
+      "quantity": 2
     }
-    ```
-  - **Error (403, if not admin)**:
+  ]
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  []
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-  - **Error (401, if no valid JWT)**:
+  - **HTTP 500**: Server error when retrieving cart items.
     ```json
     {
-      "msg": "Missing Authorization Header"
+      "error": "An internal server error occurred"
     }
     ```
 
-## Example Usage
-### Obtaining a JWT Token
-First, authenticate via the login endpoint (assumed to be `/api/login`):
-```bash
-curl -X POST http://localhost:5000/api/login -H "Content-Type: application/json" -d '{"email":"user@example.com","password":"password"}'
-```
-Response:
-```json
-{
-  "access_token": "<your_jwt_token>"
-}
-```
+---
 
-For admin operations, use an admin account:
-```bash
-curl -X POST http://localhost:5000/api/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"adminpassword"}'
-```
-Response:
-```json
-{
-  "access_token": "<admin_jwt_token>"
-}
-```
+## 7. Get All Cart Items (Admin Only)
+### Endpoint: `/admin/cart_items`
+### Method: `GET`
+### Description
+Retrieves a paginated list of all cart items in the system. This endpoint is restricted to admin users only.
 
-### Adding a Cart Item (User or Admin)
-```bash
-curl -X POST http://localhost:5000/api/cart_items -H "Authorization: Bearer <user_token>" -H "Content-Type: application/json" -d '{"user_id":1,"product_id":1,"quantity":2}'
-```
-Response:
-```json
-{
-  "message": "Cart item added successfully",
-  "cart_item_id": 1
-}
-```
-Note: Non-admin users can only add items to their own cart (`user_id` must match `get_jwt_identity()`). Admins can add items to any user’s cart.
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
 
-### Getting a Cart Item by ID (User or Admin)
-```bash
-curl -X GET http://localhost:5000/api/cart_items/1 -H "Authorization: Bearer <user_token>"
-```
-Response:
-```json
-{
-  "id": 1,
-  "user_id": 1,
-  "product_id": 1,
-  "quantity": 2,
-  "added_at": "2025-05-23T22:00:00Z"
-}
-```
-Note: Non-admin users can only access their own cart items. Admins can access any cart item.
+### Inputs (Query Parameters)
+- `page` (integer, default: `1`): The page number for pagination.
+- `per_page` (integer, default: `20`): The number of cart items per page.
 
-### Getting Cart Items by User (User or Admin)
-```bash
-curl -X GET http://localhost:5000/api/cart_items/user/1 -H "Authorization: Bearer <user_token>"
-```
-Response:
-```json
-{
-  "cart_items": [
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "cart_items": [
+      {
+        "id": 456,
+        "user_id": 789,
+        "product_id": 123,
+        "quantity": 2
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "per_page": 20
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
+    ```json
     {
-      "id": 1,
-      "user_id": 1,
-      "product_id": 1,
-      "quantity": 2,
-      "added_at": "2025-05-23T22:00:00Z",
-      "product_name": "Sample Product",
-      "product_price": 19.99
+      "error": "Admin privileges required"
     }
-  ]
-}
-```
-Note: Non-admin users can only access their own cart items. Admins can access cart items for any user.
-
-### Updating a Cart Item (User or Admin)
-```bash
-curl -X PUT http://localhost:5000/api/cart_items/1 -H "Authorization: Bearer <user_token>" -H "Content-Type: application/json" -d '{"quantity":3}'
-```
-Response:
-```json
-{
-  "message": "Cart item updated successfully"
-}
-```
-Note: Non-admin users can only update their own cart items. Admins can update any cart item.
-
-### Deleting a Cart Item (User or Admin)
-```bash
-curl -X DELETE http://localhost:5000/api/cart_items/1 -H "Authorization: Bearer <user_token>"
-```
-Response:
-```json
-{
-  "message": "Cart item deleted successfully"
-}
-```
-Note: Non-admin users can only delete their own cart items. Admins can delete any cart item.
-
-### Getting All Cart Items (Admin Only)
-```bash
-curl -X GET http://localhost:5000/api/cart_items?page=1&per_page=20 -H "Authorization: Bearer <admin_token>"
-```
-Response:
-```json
-{
-  "cart_items": [
+    ```
+  - **HTTP 500**: Server error when retrieving cart items.
+    ```json
     {
-      "id": 1,
-      "user_id": 1,
-      "product_id": 1,
-      "quantity": 3,
-      "added_at": "2025-05-23T22:00:00Z",
-      "product_name": "Sample Product",
-      "product_price": 19.99
-    },
-    ...
-  ],
-  "total": 10,
-  "page": 1,
-  "per_page": 20
-}
-```
+      "error": "An internal server error occurred"
+    }
+    ```
+
+---
 
 ## Notes
-- **Database Manager**: The API relies on `CartItemManager` for database operations.
-- **Error Handling**: All endpoints return appropriate HTTP status codes and error messages. Errors are logged for debugging.
-- **Security**:
-  - User-specific endpoints (`POST /api/cart_items`, `GET /api/cart_items/<cart_item_id>`, `GET /api/cart_items/user/<user_id>`, `PUT /api/cart_items/<cart_item_id>`, `DELETE /api/cart_items/<cart_item_id>`) restrict access to the authenticated user’s cart items unless the user is an admin.
-  - The admin endpoint (`GET /api/cart_items`) requires a valid JWT with admin privileges.
-- **Data Validation**: Ensures required fields (`user_id`, `product_id`, `quantity`) are provided when adding a cart item. The `update_cart_item` endpoint requires a valid `quantity`.
-- **Product Information**: The `product_name` and `product_price` fields in `GET /api/cart_items/user/<user_id>` and `GET /api/cart_items` assume the `CartItemManager` returns `name` and `price` fields (e.g., via a database join with the products table). If not supported, remove these fields from the response.
-- **Testing**: Unit tests can be created in `test/test_cart_items.py` to verify functionality.
-
-For further details, refer to the source code in `admin_apis/cart_items.py`.
+- All endpoints interact with the database through the `CartItemManager` class.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` with a dedicated logger (`logger = logging.getLogger(__name__)`) for debugging and monitoring.
+- The custom `@check_cart_item_ownership` decorator ensures that users can only access their own cart items unless they are admins, and it optimizes database access by passing the fetched cart item to the route handler via Flask's `g` object.
+- Error responses include a descriptive `error` field to assist clients in troubleshooting.
+- The `POST /cart/items` endpoint automatically uses the authenticated user's ID (`session['user_id']`) to prevent users from adding items to another user's cart.
+- The `PUT /cart/items/<int:cart_item_id>` endpoint validates that the `quantity` is a non-negative integer.
+- Admin-only endpoints (`GET /admin/cart_items/user/<int:user_id>` and `GET /admin/cart_items`) provide visibility into all cart items for administrative purposes.

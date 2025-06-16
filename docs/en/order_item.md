@@ -1,274 +1,299 @@
 # Order Items API Documentation
 
-This document provides detailed information about the Order Items API endpoints defined in `admin_apis/order_items.py`. These endpoints manage order items in an e-commerce platform, including adding, retrieving, updating, and deleting order items. Authentication and authorization are enforced using JWT (JSON Web Tokens) with specific roles (`@jwt_required()` for authenticated users and `@admin_required` for admins).
-
-## Base URL
-All endpoints are prefixed with `/api`. For example, `/order_items` is accessed as `/api/order_items`.
+This document provides detailed information about the Order Items API endpoints implemented in the Flask Blueprint `order_items`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- **JWT Token**: Required for endpoints marked with `@jwt_required()` or `@admin_required`. Include the token in the `Authorization` header as `Bearer <token>`.
-- **Admin Privileges**: Endpoints marked with `@admin_required` require a JWT token with `is_admin: true`.
-- **User Authorization**: Non-admin users can only access order items associated with their own orders.
+- Endpoints for adding (`POST /order_items`), updating (`PUT /order_items/<int:order_item_id>`), deleting (`DELETE /order_items/<int:order_item_id>`), and retrieving all order items (`GET /order_items`) require admin privileges, enforced by the `@admin_required` decorator.
+- Endpoints for retrieving a specific order item (`GET /order_items/<int:order_item_id>`) and retrieving order items by order (`GET /order_items/order/<int:order_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
+- Non-admin users can only access order items associated with their own orders (`order['user_id']` must match `session['user_id']`).
+- The `OrderItemManager` class handles database interactions for order item-related operations, and the `OrderManager` class is used to verify order ownership.
 
-## Endpoints
+---
 
-### 1. Add Order Item
-- **Endpoint**: `POST /api/order_items`
-- **Description**: Adds a new order item to an order (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
+## 1. Add a New Order Item
+### Endpoint: `/order_items`
+### Method: `POST`
+### Description
+Creates a new order item for a specified order. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (Request Body)
+- **Content-Type**: `application/json`
+- **Required Fields**:
+  - `order_id` (integer): The ID of the order to which the item belongs.
+  - `product_id` (integer): The ID of the product being ordered.
+  - `quantity` (integer): The quantity of the product in the order.
+  - `price` (float): The price per unit of the product.
+
+**Example Request Body**:
+```json
+{
+  "order_id": 789,
+  "product_id": 123,
+  "quantity": 2,
+  "price": 49.99
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 201):
   ```json
   {
-    "order_id": <integer>,      // Required: ID of the order
-    "product_id": <integer>,    // Required: ID of the product
-    "quantity": <integer>,      // Required: Quantity of the product
-    "price": <float>           // Required: Price per unit
+    "message": "Order item added successfully",
+    "order_item_id": 456
   }
   ```
-- **Output**:
-  - **Success (201)**:
-    ```json
-    {
-      "message": "Order item added successfully",
-      "order_item_id": <integer>
-    }
-    ```
-  - **Error (400)**:
+- **Error Responses**:
+  - **HTTP 400**: Missing required fields (`order_id`, `product_id`, `quantity`, or `price`).
     ```json
     {
       "error": "Order ID, product ID, quantity, and price are required"
     }
     ```
-  - **Error (500)**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
+    ```json
+    {
+      "error": "Admin privileges required"
+    }
+    ```
+  - **HTTP 500**: Server error when failing to add the order item to the database.
     ```json
     {
       "error": "Failed to add order item"
     }
     ```
-  - **Error (403, if not admin)**:
-    ```json
-    {
-      "error": "Admin privileges required"
-    }
-    ```
 
-### 2. Get Order Item by ID
-- **Endpoint**: `GET /api/order_items/<order_item_id>`
-- **Description**: Retrieves an order item by its ID. Users can only access items from their own orders.
-- **Authorization**: Requires `@jwt_required()`. Non-admin users must own the associated order.
-- **Input**: URL parameter `order_item_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "id": <integer>,
-      "order_id": <integer>,
-      "product_id": <integer>,
-      "quantity": <integer>,
-      "price": <float>
-    }
-    ```
-  - **Error (404)**:
-    ```json
-    {
-      "error": "Order item not found"
-    }
-    ```
-  - **Error (404, if order not found)**:
-    ```json
-    {
-      "error": "Associated order not found"
-    }
-    ```
-  - **Error (403, if unauthorized)**:
+---
+
+## 2. Get Order Item by ID
+### Endpoint: `/order_items/<int:order_item_id>`
+### Method: `GET`
+### Description
+Retrieves the details of a specific order item by its ID. Only the user who owns the associated order or an admin can access it.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+- Non-admin users can only access order items for their own orders (`order['user_id']` must match `session['user_id']`).
+
+### Inputs (URL Parameters)
+- `order_item_id` (integer): The ID of the order item to retrieve.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "id": 456,
+    "order_id": 789,
+    "product_id": 123,
+    "quantity": 2,
+    "price": 49.99
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Unauthorized to access the order item (non-admin attempting to access an order item from another user's order).
     ```json
     {
       "error": "Unauthorized access to this order item"
     }
     ```
+  - **HTTP 404**: Order item or associated order not found.
+    ```json
+    {
+      "error": "Order item not found"
+    }
+    ```
+    ```json
+    {
+      "error": "Associated order not found"
+    }
+    ```
 
-### 3. Get Order Items by Order
-- **Endpoint**: `GET /api/order_items/order/<order_id>`
-- **Description**: Retrieves all order items for a specific order. Users can only access items from their own orders.
-- **Authorization**: Requires `@jwt_required()`. Non-admin users must own the order.
-- **Input**: URL parameter `order_id` (integer).
-- **Output**:
-  - **Success (200, with items)**:
-    ```json
-    {
-      "order_items": [
-        {
-          "id": <integer>,
-          "order_id": <integer>,
-          "product_id": <integer>,
-          "quantity": <integer>,
-          "price": <float>,
-          "product_name": <string>
-        },
-        ...
-      ]
-    }
-    ```
-  - **Success (200, no items)**:
-    ```json
-    {
-      "order_items": [],
-      "message": "No order items found for this order"
-    }
-    ```
-  - **Error (404)**:
-    ```json
-    {
-      "error": "Order not found"
-    }
-    ```
-  - **Error (403, if unauthorized)**:
+---
+
+## 3. Get Order Items by Order
+### Endpoint: `/order_items/order/<int:order_id>`
+### Method: `GET`
+### Description
+Retrieves all order items for a specific order. Only the user who owns the order or an admin can access these items.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+- Non-admin users can only access order items for their own orders (`order['user_id']` must match `session['user_id']`).
+
+### Inputs (URL Parameters)
+- `order_id` (integer): The ID of the order whose items are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "order_items": [
+      {
+        "id": 456,
+        "order_id": 789,
+        "product_id": 123,
+        "quantity": 2,
+        "price": 49.99,
+        "product_name": "Wireless Headphones"
+      }
+    ]
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "order_items": [],
+    "message": "No order items found for this order"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Unauthorized to view items for the order (non-admin attempting to access another user's order).
     ```json
     {
       "error": "Unauthorized to view items for this order"
     }
     ```
-
-### 4. Update Order Item
-- **Endpoint**: `PUT /api/order_items/<order_item_id>`
-- **Description**: Updates an order item’s quantity or price (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
-  ```json
-  {
-    "quantity": <integer>,  // Optional: New quantity
-    "price": <float>       // Optional: New price
-  }
-  ```
-- **Output**:
-  - **Success (200)**:
+  - **HTTP 404**: Order not found.
     ```json
     {
-      "message": "Order item updated successfully"
+      "error": "Order not found"
     }
     ```
-  - **Error (400)**:
+
+---
+
+## 4. Update Order Item
+### Endpoint: `/order_items/<int:order_item_id>`
+### Method: `PUT`
+### Description
+Updates the details of an existing order item. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `order_item_id` (integer): The ID of the order item to update.
+- **Request Body** (Content-Type: `application/json`):
+  - **Optional Fields**:
+    - `quantity` (integer): The updated quantity of the product.
+    - `price` (float): The updated price per unit of the product.
+
+**Example Request Body**:
+```json
+{
+  "quantity": 3,
+  "price": 45.99
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Order item updated successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 400**: Failure to update the order item (e.g., invalid data or database error).
     ```json
     {
       "error": "Failed to update order item"
     }
     ```
-  - **Error (403, if not admin)**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
 
-### 5. Delete Order Item
-- **Endpoint**: `DELETE /api/order_items/<order_item_id>`
-- **Description**: Deletes an order item by ID (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `order_item_id` (integer).
-- **Output**:
-  - **Success (200)**:
+---
+
+## 5. Delete Order Item
+### Endpoint: `/order_items/<int:order_item_id>`
+### Method: `DELETE`
+### Description
+Deletes an order item by its ID. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `order_item_id` (integer): The ID of the order item to delete.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Order item deleted successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
-      "message": "Order item deleted successfully"
+      "error": "Admin privileges required"
     }
     ```
-  - **Error (404)**:
+  - **HTTP 404**: Order item not found or failed to delete.
     ```json
     {
       "error": "Order item not found or failed to delete"
     }
     ```
-  - **Error (403, if not admin)**:
+
+---
+
+## 6. Get All Order Items (Admin Only)
+### Endpoint: `/order_items`
+### Method: `GET`
+### Description
+Retrieves a paginated list of all order items in the system. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (Query Parameters)
+- `page` (integer, default: `1`): The page number for pagination.
+- `per_page` (integer, default: `20`): The number of order items per page.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "order_items": [
+      {
+        "id": 456,
+        "order_id": 789,
+        "product_id": 123,
+        "quantity": 2,
+        "price": 49.99,
+        "product_name": "Wireless Headphones"
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "per_page": 20
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
 
-### 6. Get All Order Items (Paginated)
-- **Endpoint**: `GET /api/order_items?page=<page>&per_page=<per_page>`
-- **Description**: Retrieves a paginated list of all order items (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
-  - Query parameters:
-    - `page` (integer, default: 1)
-    - `per_page` (integer, default: 20)
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "order_items": [
-        {
-          "id": <integer>,
-          "order_id": <integer>,
-          "product_id": <integer>,
-          "quantity": <integer>,
-          "price": <float>,
-          "product_name": <string>
-        },
-        ...
-      ],
-      "total": <integer>,
-      "page": <integer>,
-      "per_page": <integer>
-    }
-    ```
-  - **Error (403, if not admin)**:
-    ```json
-    {
-      "error": "Admin privileges required"
-    }
-    ```
-
-## Example Usage
-### Obtaining a JWT Token
-First, authenticate via the login endpoint (assumed to be `/api/login`):
-```bash
-curl -X POST http://localhost:5000/api/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"adminpassword"}'
-```
-Response:
-```json
-{
-  "access_token": "<your_jwt_token>"
-}
-```
-
-### Adding an Order Item (Admin)
-```bash
-curl -X POST http://localhost:5000/api/order_items -H "Authorization: Bearer <admin_token>" -H "Content-Type: application/json" -d '{"order_id":1,"product_id":1,"quantity":2,"price":19.99}'
-```
-Response:
-```json
-{
-  "message": "Order item added successfully",
-  "order_item_id": 1
-}
-```
-
-### Getting Order Items for an Order (User)
-```bash
-curl -X GET http://localhost:5000/api/order_items/order/1 -H "Authorization: Bearer <user_token>"
-```
-Response:
-```json
-{
-  "order_items": [
-    {
-      "id": 1,
-      "order_id": 1,
-      "product_id": 1,
-      "quantity": 2,
-      "price": 19.99,
-      "product_name": "Laptop"
-    }
-  ]
-}
-```
+---
 
 ## Notes
-- **Database Managers**: The API relies on `OrderItemManager` and `OrderManager` for database operations.
-- **Error Handling**: All endpoints return appropriate HTTP status codes and error messages.
-- **Security**: Ensure the JWT secret key is securely configured in `app.py`.
-- **Testing**: Unit tests can be created in `test/test_order_items.py` to verify functionality.
-
-For further details, refer to the source code in `admin_apis/order_items.py`.
+- All endpoints interact with the database through the `OrderItemManager` class, with the `OrderManager` class used to verify order ownership for `GET /order_items/<int:order_item_id>` and `GET /order_items/order/<int:order_id>` endpoints.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` for debugging and monitoring purposes.
+- The `product_name` field is included in the response for the `GET /order_items/order/<int:order_id>` and `GET /order_items` endpoints to provide additional context.
+- Error responses include a descriptive `error` field to assist clients in troubleshooting.
+- The `GET /order_items/order/<int:order_id>` endpoint returns an empty list with a message if no order items are found for the specified order.
+- The `POST /order_items`, `PUT /order_items/<int:order_item_id>`, `DELETE /order_items/<int:order_item_id>`, and `GET /order_items` endpoints are restricted to admins, while `GET /order_items/<int:order_item_id>` and `GET /order_items/order/<int:order_id>` endpoints allow access to authenticated users who own the associated order.

@@ -1,401 +1,426 @@
 # Category Discounts API Documentation
 
-This document provides detailed information about the Category Discounts API endpoints defined in `admin_apis/category_discounts.py`. These endpoints manage discounts applied to specific product categories in an e-commerce platform, including adding, retrieving, updating, and deleting category discounts. Authentication and authorization are enforced using JWT (JSON Web Tokens) with specific roles (`@admin_required` for admin-only operations).
-
-## Base URL
-All endpoints are prefixed with `/api`. For example, `/category_discounts` is accessed as `/api/category_discounts`.
+This document provides detailed information about the Category Discounts API endpoints implemented in the Flask Blueprint `category_discounts`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- **JWT Token**: Required for endpoints marked with `@admin_required`. Include the token in the `Authorization` header as `Bearer <token>`.
-- **Admin Privileges**: Endpoints marked with `@admin_required` require a JWT token with `is_admin: true`.
-- **Public Access**: Endpoints without authentication (`GET /category_discounts/category/<category_id>`, `GET /category_discounts/valid/<category_id>`) are accessible to everyone.
+- Endpoints for adding (`POST /category_discounts`), updating (`PUT /category_discounts/<int:discount_id>`), deleting (`DELETE /category_discounts/<int:discount_id>`), retrieving a specific category discount (`GET /category_discounts/<int:discount_id>`), and retrieving all category discounts (`GET /category_discounts`) require admin privileges, enforced by the `@admin_required` decorator.
+- Endpoints for retrieving all discounts for a category (`GET /category_discounts/category/<int:category_id>`) and retrieving valid discounts for a category (`GET /category_discounts/valid/<int:category_id>`) are publicly accessible without authentication.
+- The `CategoryDiscountManager` class handles all database interactions for category discount-related operations.
 
-## Endpoints
+---
 
-### 1. Add Category Discount
-- **Endpoint**: `POST /api/category_discounts`
-- **Description**: Adds a new discount for a specific category (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
+## 1. Add a New Category Discount
+### Endpoint: `/category_discounts`
+### Method: `POST`
+### Description
+Creates a new discount for a specific category. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (Request Body)
+- **Content-Type**: `application/json`
+- **Required Fields**:
+  - `category_id` (integer): The ID of the category to which the discount applies.
+  - `discount_percent` (float): The discount percentage (between 0 and 100).
+- **Optional Fields**:
+  - `starts_at` (string, ISO 8601 format): The start date and time of the discount.
+  - `ends_at` (string, ISO 8601 format): The end date and time of the discount.
+  - `is_active` (boolean, default: `true`): Whether the discount is active.
+
+**Example Request Body**:
+```json
+{
+  "category_id": 123,
+  "discount_percent": 20.0,
+  "starts_at": "2025-06-16T00:00:00Z",
+  "ends_at": "2025-07-16T23:59:59Z",
+  "is_active": true
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 201):
   ```json
   {
-    "category_id": <integer>,      // Required: ID of the category
-    "discount_percent": <float>,   // Required: Discount percentage (0-100)
-    "starts_at": <string>,        // Optional: Start date (ISO 8601, e.g., "2025-05-23T00:00:00Z")
-    "ends_at": <string>,          // Optional: End date (ISO 8601, e.g., "2025-12-31T23:59:59Z")
-    "is_active": <integer>        // Optional: 1 (active) or 0 (inactive), default: 1
+    "id": 456,
+    "category_id": 123,
+    "discount_percent": 20.0,
+    "starts_at": "2025-06-16T00:00:00Z",
+    "ends_at": "2025-07-16T23:59:59Z",
+    "is_active": true
   }
   ```
-- **Output**:
-  - **Success (201)**:
+- **Error Responses**:
+  - **HTTP 400**: Invalid JSON payload, missing required fields (`category_id` or `discount_percent`), invalid `category_id` (not a positive integer), invalid `discount_percent` (not between 0 and 100), invalid date format, or `starts_at` is after `ends_at`.
     ```json
     {
-      "message": "Category discount added successfully",
-      "discount_id": <integer>
+      "error": "Request body must be JSON"
     }
     ```
-  - **Error (400)**:
     ```json
     {
       "error": "Category ID and discount percent are required"
     }
     ```
-    or
     ```json
     {
       "error": "Category ID must be a positive integer"
     }
     ```
-    or
     ```json
     {
       "error": "Discount percent must be between 0 and 100"
     }
     ```
-    or
     ```json
     {
-      "error": "starts_at must be in ISO 8601 format"
+      "error": "Invalid date format: Invalid ISO 8601 string. Use ISO 8601 format."
     }
     ```
-    or
-    ```json
-    {
-      "error": "ends_at must be in ISO 8601 format"
-    }
-    ```
-    or
     ```json
     {
       "error": "starts_at must be before ends_at"
     }
     ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-
-### 2. Get Category Discount by ID
-- **Endpoint**: `GET /api/category_discounts/<discount_id>`
-- **Description**: Retrieves a category discount by its ID (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `discount_id` (integer).
-- **Output**:
-  - **Success (200)**:
+  - **HTTP 500**: Server error when failing to add the category discount to the database.
     ```json
     {
-      "id": <integer>,
-      "category_id": <integer>,
-      "discount_percent": <float>,
-      "starts_at": <string>,
-      "ends_at": <string>,
-      "is_active": <integer>
-    }
-    ```
-  - **Error (404)**:
-    ```json
-    {
-      "error": "Category discount not found"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
-    ```json
-    {
-      "error": "Admin privileges required"
+      "error": "An internal server error occurred"
     }
     ```
 
-### 3. Get Category Discounts by Category
-- **Endpoint**: `GET /api/category_discounts/category/<category_id>`
-- **Description**: Retrieves all discounts for a specific category. Publicly accessible.
-- **Authorization**: None (public access).
-- **Input**: URL parameter `category_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "category_discounts": [
-        {
-          "id": <integer>,
-          "category_id": <integer>,
-          "discount_percent": <float>,
-          "starts_at": <string>,
-          "ends_at": <string>,
-          "is_active": <integer>
-        },
-        ...
-      ]
-    }
-    ```
-  - **Error (400)**:
-    ```json
-    {
-      "error": "Category ID must be a positive integer"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
+---
 
-### 4. Get Valid Category Discounts
-- **Endpoint**: `GET /api/category_discounts/valid/<category_id>`
-- **Description**: Retrieves valid discounts for a specific category (checks `is_active`, `starts_at`, and `ends_at`). Publicly accessible.
-- **Authorization**: None (public access).
-- **Input**: URL parameter `category_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "category_discounts": [
-        {
-          "id": <integer>,
-          "category_id": <integer>,
-          "discount_percent": <float>,
-          "starts_at": <string>,
-          "ends_at": <string>,
-          "is_active": <integer>
-        },
-        ...
-      ]
-    }
-    ```
-  - **Error (400)**:
-    ```json
-    {
-      "error": "Category ID must be a positive integer"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
+## 2. Update Category Discount
+### Endpoint: `/category_discounts/<int:discount_id>`
+### Method: `PUT`
+### Description
+Updates the details of an existing category discount. This endpoint is restricted to admin users only.
 
-### 5. Update Category Discount
-- **Endpoint**: `PUT /api/category_discounts/<discount_id>`
-- **Description**: Updates a category discount’s details (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `discount_id` (integer): The ID of the category discount to update.
+- **Request Body** (Content-Type: `application/json`):
+  - **Optional Fields**:
+    - `category_id` (integer): The updated category ID.
+    - `discount_percent` (float): The updated discount percentage (between 0 and 100).
+    - `starts_at` (string, ISO 8601 format): The updated start date and time.
+    - `ends_at` (string, ISO 8601 format): The updated end date and time.
+    - `is_active` (boolean): The updated active status.
+
+**Example Request Body**:
+```json
+{
+  "discount_percent": 25.0,
+  "ends_at": "2025-08-16T23:59:59Z",
+  "is_active": false
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 200):
   ```json
   {
-    "discount_percent": <float>,   // Optional: Discount percentage (0-100)
-    "starts_at": <string>,        // Optional: Start date (ISO 8601)
-    "ends_at": <string>,          // Optional: End date (ISO 8601)
-    "is_active": <integer>        // Optional: 1 (active) or 0 (inactive)
+    "id": 456,
+    "category_id": 123,
+    "discount_percent": 25.0,
+    "starts_at": "2025-06-16T00:00:00Z",
+    "ends_at": "2025-08-16T23:59:59Z",
+    "is_active": false
   }
   ```
-- **Output**:
-  - **Success (200)**:
+- **Error Responses**:
+  - **HTTP 400**: Invalid JSON payload, invalid `category_id` (not a positive integer), invalid `discount_percent` (not between 0 and 100), invalid date format, `starts_at` is after `ends_at`, or failure to update the discount.
     ```json
     {
-      "message": "Category discount updated successfully"
+      "error": "Request body must be JSON"
     }
     ```
-  - **Error (400)**:
+    ```json
+    {
+      "error": "Category ID must be a positive integer"
+    }
+    ```
+    ```json
+    {
+      "error": "Discount percent must be between 0 and 100"
+    }
+    ```
+    ```json
+    {
+      "error": "Invalid date format: Invalid ISO 8601 string. Use ISO 8601 format."
+    }
+    ```
+    ```json
+    {
+      "error": "starts_at must be before ends_at"
+    }
+    ```
     ```json
     {
       "error": "Failed to update category discount"
     }
     ```
-    or
-    ```json
-    {
-      "error": "Discount percent must be between 0 and 100"
-    }
-    ```
-    or
-    ```json
-    {
-      "error": "starts_at must be in ISO 8601 format"
-    }
-    ```
-    or
-    ```json
-    {
-      "error": "ends_at must be in ISO 8601 format"
-    }
-    ```
-    or
-    ```json
-    {
-      "error": "starts_at must be before ends_at"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-
-### 6. Delete Category Discount
-- **Endpoint**: `DELETE /api/category_discounts/<discount_id>`
-- **Description**: Deletes a category discount by ID (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `discount_id` (integer).
-- **Output**:
-  - **Success (200)**:
+  - **HTTP 404**: Category discount with the specified ID does not exist.
     ```json
     {
-      "message": "Category discount deleted successfully"
+      "error": "Category discount not found"
     }
     ```
-  - **Error (404)**:
+  - **HTTP 500**: Server error when updating the category discount.
+    ```json
+    {
+      "error": "An internal server error occurred"
+    }
+    ```
+
+---
+
+## 3. Get Category Discount by ID
+### Endpoint: `/category_discounts/<int:discount_id>`
+### Method: `GET`
+### Description
+Retrieves the details of a specific category discount by its ID. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (URL Parameters)
+- `discount_id` (integer): The ID of the category discount to retrieve.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "id": 456,
+    "category_id": 123,
+    "discount_percent": 20.0,
+    "starts_at": "2025-06-16T00:00:00Z",
+    "ends_at": "2025-07-16T23:59:59Z",
+    "is_active": true
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 404**: Category discount with the specified ID does not exist.
+    ```json
+    {
+      "error": "Category discount not found"
+    }
+    ```
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
+    ```json
+    {
+      "error": "Admin privileges required"
+    }
+    ```
+  - **HTTP 500**: Server error when retrieving the category discount.
+    ```json
+    {
+      "error": "Internal server error"
+    }
+    ```
+
+---
+
+## 4. Get Discounts by Category
+### Endpoint: `/category_discounts/category/<int:category_id>`
+### Method: `GET`
+### Description
+Retrieves all discounts associated with a specific category. This endpoint is publicly accessible without authentication.
+
+### Authentication
+- No authentication required.
+
+### Inputs (URL Parameters)
+- `category_id` (integer): The ID of the category whose discounts are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "category_discounts": [
+      {
+        "id": 456,
+        "category_id": 123,
+        "discount_percent": 20.0,
+        "starts_at": "2025-06-16T00:00:00Z",
+        "ends_at": "2025-07-16T23:59:59Z",
+        "is_active": true
+      }
+    ]
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "category_discounts": []
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 500**: Server error when retrieving the category discounts.
+    ```json
+    {
+      "error": "Internal server error"
+    }
+    ```
+
+---
+
+## 5. Get Valid Category Discounts
+### Endpoint: `/category_discounts/valid/<int:category_id>`
+### Method: `GET`
+### Description
+Retrieves all valid discounts for a specific category (discounts that are active and within their start/end date range). This endpoint is publicly accessible without authentication.
+
+### Authentication
+- No authentication required.
+
+### Inputs (URL Parameters)
+- `category_id` (integer): The ID of the category whose valid discounts are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "category_discounts": [
+      {
+        "id": 456,
+        "category_id": 123,
+        "discount_percent": 20.0,
+        "starts_at": "2025-06-16T00:00:00Z",
+        "ends_at": "2025-07-16T23:59:59Z",
+        "is_active": true
+      }
+    ]
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "category_discounts": []
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 500**: Server error when retrieving valid category discounts.
+    ```json
+    {
+      "error": "Internal server error"
+    }
+    ```
+
+---
+
+## 6. Delete Category Discount
+### Endpoint: `/category_discounts/<int:discount_id>`
+### Method: `DELETE`
+### Description
+Deletes a category discount by its ID. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `discount_id` (integer): The ID of the category discount to delete.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Category discount deleted successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
+    ```json
+    {
+      "error": "Admin privileges required"
+    }
+    ```
+  - **HTTP 404**: Category discount with the specified ID does not exist or failed to delete.
     ```json
     {
       "error": "Category discount not found or failed to delete"
     }
     ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when deleting the category discount.
     ```json
     {
       "error": "Internal server error"
     }
     ```
-  - **Error (403, if not admin)**:
+
+---
+
+## 7. Get All Category Discounts (Admin Only)
+### Endpoint: `/category_discounts`
+### Method: `GET`
+### Description
+Retrieves a paginated list of all category discounts in the system. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (Query Parameters)
+- `page` (integer, default: `1`): The page number for pagination.
+- `per_page` (integer, default: `20`): The number of category discounts per page.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "category_discounts": [
+      {
+        "id": 456,
+        "category_id": 123,
+        "discount_percent": 20.0,
+        "starts_at": "2025-06-16T00:00:00Z",
+        "ends_at": "2025-07-16T23:59:59Z",
+        "is_active": true
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "per_page": 20
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-
-### 7. Get All Category Discounts (Paginated)
-- **Endpoint**: `GET /api/category_discounts?page=<page>&per_page=<per_page>`
-- **Description**: Retrieves a paginated list of all category discounts (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
-  - Query parameters:
-    - `page` (integer, default: 1)
-    - `per_page` (integer, default: 20)
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "category_discounts": [
-        {
-          "id": <integer>,
-          "category_id": <integer>,
-          "discount_percent": <float>,
-          "starts_at": <string>,
-          "ends_at": <string>,
-          "is_active": <integer>,
-          "category_name": <string>
-        },
-        ...
-      ],
-      "total": <integer>,
-      "page": <integer>,
-      "per_page": <integer>
-    }
-    ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when retrieving category discounts.
     ```json
     {
       "error": "Internal server error"
     }
     ```
-  - **Error (403, if not admin)**:
-    ```json
-    {
-      "error": "Admin privileges required"
-    }
-    ```
 
-## Example Usage
-### Obtaining a JWT Token
-First, authenticate via the login endpoint (assumed to be `/api/login`):
-```bash
-curl -X POST http://localhost:5000/api/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"adminpassword"}'
-```
-Response:
-```json
-{
-  "access_token": "<your_jwt_token>"
-}
-```
-
-### Adding a Category Discount (Admin)
-```bash
-curl -X POST http://localhost:5000/api/category_discounts -H "Authorization: Bearer <admin_token>" -H "Content-Type: application/json" -d '{"category_id":1,"discount_percent":10.0,"starts_at":"2025-05-23T00:00:00Z","ends_at":"2025-12-31T23:59:59Z","is_active":1}'
-```
-Response:
-```json
-{
-  "message": "Category discount added successfully",
-  "discount_id": 1
-}
-```
-
-### Getting Category Discounts by Category (Public)
-```bash
-curl -X GET http://localhost:5000/api/category_discounts/category/1
-```
-Response:
-```json
-{
-  "category_discounts": [
-    {
-      "id": 1,
-      "category_id": 1,
-      "discount_percent": 10.0,
-      "starts_at": "2025-05-23T00:00:00Z",
-      "ends_at": "2025-12-31T23:59:59Z",
-      "is_active": 1
-    }
-  ]
-}
-```
-
-### Getting Valid Category Discounts (Public)
-```bash
-curl -X GET http://localhost:5000/api/category_discounts/valid/1
-```
-Response:
-```json
-{
-  "category_discounts": [
-    {
-      "id": 1,
-      "category_id": 1,
-      "discount_percent": 10.0,
-      "starts_at": "2025-05-23T00:00:00Z",
-      "ends_at": "2025-12-31T23:59:59Z",
-      "is_active": 1
-    }
-  ]
-}
-```
+---
 
 ## Notes
-- **Database Manager**: The API relies on `CategoryDiscountManager` for database operations.
-- **Error Handling**: All endpoints return appropriate HTTP status codes and error messages. Errors are logged for debugging.
-- **Security**: Admin endpoints require a valid JWT with admin privileges. Public endpoints are accessible to everyone for viewing category discounts.
-- **Data Validation**: Discount percentage is validated to be between 0 and 100, category ID must be a positive integer, and date fields (`starts_at`, `ends_at`) must be in ISO 8601 format.
-- **Category Name**: The `category_name` field in `GET /api/category_discounts` assumes the `CategoryDiscountManager` returns a `name` field (e.g., via a database join with the categories table). If not supported, remove this field from the response.
-- **Testing**: Unit tests can be created in `test/test_category_discounts.py` to verify functionality (not included in this response per request).
-
-For further details, refer to the source code in `admin_apis/category_discounts.py`.
+- All endpoints interact with the database through the `CategoryDiscountManager` class.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` with a dedicated logger (`logger = logging.getLogger(__name__)`) for debugging and monitoring.
+- Date fields (`starts_at` and `ends_at`) in requests and responses are in ISO 8601 format (e.g., `2025-06-16T00:00:00Z`).
+- Error responses include a descriptive `error` field to assist clients in troubleshooting.
+- The `_validate_discount_data` helper function validates inputs for `POST` and `PUT` endpoints, ensuring consistency in error handling for required fields, data types, and date ranges.
+- Public endpoints (`GET /category_discounts/category/<int:category_id>` and `GET /category_discounts/valid/<int:category_id>`) provide read-only access to category discount data without requiring authentication.
+- The `GET /category_discounts/valid/<int:category_id>` endpoint returns only discounts that are active (`is_active = true`), have started (`starts_at` is in the past or null), and have not ended (`ends_at` is in the future or null).

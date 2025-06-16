@@ -1,326 +1,289 @@
-# Products API Documentation
+# Payments API Documentation
 
-This document provides detailed information about the Products API endpoints defined in `admin_apis/products.py`. These endpoints manage products in an e-commerce platform, including adding, retrieving, updating, and deleting products. Authentication and authorization are enforced using JWT (JSON Web Tokens) with specific roles (`@admin_required` for admin-only operations).
-
-## Base URL
-All endpoints are prefixed with `/api`. For example, `/products` is accessed as `/api/products`.
+This document provides detailed information about the Payments API endpoints implemented in the Flask Blueprint `payments`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- **JWT Token**: Required for endpoints marked with `@admin_required`. Include the token in the `Authorization` header as `Bearer <token>`.
-- **Admin Privileges**: Endpoints marked with `@admin_required` require a JWT token with `is_admin: true`.
-- **Public Access**: Endpoints without authentication (`GET /products`, `GET /products/<product_id>`, `GET /products/category/<category_id>`) are accessible to everyone but only return active products (`is_active: 1`).
+- Endpoints for adding (`POST /payments`), retrieving a specific payment (`GET /payments/<int:payment_id>`), and retrieving payments by order (`GET /payments/order/<int:order_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
+- Endpoints for updating (`PUT /payments/<int:payment_id>`), deleting (`DELETE /payments/<int:payment_id>`), and retrieving all payments (`GET /payments`) require admin privileges, enforced by the `@admin_required` decorator.
+- The `PaymentManager` class handles all database interactions for payment-related operations.
 
-## Endpoints
+---
 
-### 1. Add Product
-- **Endpoint**: `POST /api/products`
-- **Description**: Adds a new product to the catalog (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
+## 1. Add a New Payment
+### Endpoint: `/payments`
+### Method: `POST`
+### Description
+Creates a new payment for an order. This endpoint requires a valid user session.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+
+### Inputs (Request Body)
+- **Content-Type**: `application/json`
+- **Required Fields**:
+  - `order_id` (integer): The ID of the order associated with the payment.
+  - `payment_method` (string): The method used for the payment (e.g., credit card, PayPal).
+- **Optional Fields**:
+  - `transaction_id` (string): The transaction ID provided by the payment processor.
+  - `payment_status` (string, default: `"unpaid"`): The status of the payment (e.g., unpaid, paid, failed).
+
+**Example Request Body**:
+```json
+{
+  "order_id": 789,
+  "payment_method": "credit_card",
+  "transaction_id": "txn_123456",
+  "payment_status": "paid"
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 201):
   ```json
   {
-    "name": <string>,              // Required: Product name
-    "price": <float>,              // Required: Product price
-    "stock_quantity": <integer>,   // Required: Available stock
-    "category_id": <integer>,      // Optional: Category ID
-    "description": <string>,       // Optional: Product description
-    "image_url": <string>,         // Optional: URL of product image
-    "is_active": <integer>         // Optional: 1 (active) or 0 (inactive), default: 1
+    "message": "Payment added successfully",
+    "payment_id": 456
   }
   ```
-- **Output**:
-  - **Success (201)**:
+- **Error Responses**:
+  - **HTTP 400**: Missing required fields (`order_id` or `payment_method`).
     ```json
     {
-      "message": "Product added successfully",
-      "product_id": <integer>
+      "error": "Order ID and payment method are required"
     }
     ```
-  - **Error (400)**:
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
     ```json
     {
-      "error": "Name, price, and stock quantity are required"
+      "error": "Authentication required"
     }
     ```
-    or
+  - **HTTP 500**: Server error when failing to add the payment to the database.
     ```json
     {
-      "error": "Price and stock quantity must be non-negative"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
-    ```json
-    {
-      "error": "Admin privileges required"
+      "error": "Failed to add payment"
     }
     ```
 
-### 2. Get Product by ID
-- **Endpoint**: `GET /api/products/<product_id>`
-- **Description**: Retrieves a product by its ID. Only active products are returned.
-- **Authorization**: Public access (no JWT required).
-- **Input**: URL parameter `product_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "id": <integer>,
-      "name": <string>,
-      "description": <string>,
-      "price": <float>,
-      "stock_quantity": <integer>,
-      "category_id": <integer>,
-      "image_url": <string>,
-      "is_active": <integer>,
-      "created_at": <string>
-    }
-    ```
-  - **Error (404)**:
-    ```json
-    {
-      "error": "Product not found or inactive"
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
+---
 
-### 3. Get Products by Category
-- **Endpoint**: `GET /api/products/category/<category_id>`
-- **Description**: Retrieves all active products in a specific category.
-- **Authorization**: Public access (no JWT required).
-- **Input**: URL parameter `category_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "products": [
-        {
-          "id": <integer>,
-          "name": <string>,
-          "description": <string>,
-          "price": <float>,
-          "stock_quantity": <integer>,
-          "category_id": <integer>,
-          "image_url": <string>,
-          "is_active": <integer>,
-          "created_at": <string>
-        },
-        ...
-      ]
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
+## 2. Get Payment by ID
+### Endpoint: `/payments/<int:payment_id>`
+### Method: `GET`
+### Description
+Retrieves the details of a specific payment by its ID. This endpoint requires a valid user session.
 
-### 4. Update Product
-- **Endpoint**: `PUT /api/products/<product_id>`
-- **Description**: Updates a product’s details (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
+### Authentication
+- Requires a valid session (`@session_required`).
+
+### Inputs (URL Parameters)
+- `payment_id` (integer): The ID of the payment to retrieve.
+
+### Outputs
+- **Success Response** (HTTP 200):
   ```json
   {
-    "name": <string>,              // Optional: Product name
-    "description": <string>,       // Optional: Product description
-    "price": <float>,              // Optional: Product price
-    "stock_quantity": <integer>,   // Optional: Available stock
-    "category_id": <integer>,      // Optional: Category ID
-    "image_url": <string>,         // Optional: URL of product image
-    "is_active": <integer>         // Optional: 1 (active) or 0 (inactive)
+    "id": 456,
+    "order_id": 789,
+    "payment_method": "credit_card",
+    "payment_status": "paid",
+    "transaction_id": "txn_123456",
+    "paid_at": "2025-06-16T12:57:00"
   }
   ```
-- **Output**:
-  - **Success (200)**:
+- **Error Responses**:
+  - **HTTP 404**: Payment with the specified ID does not exist.
     ```json
     {
-      "message": "Product updated successfully"
+      "error": "Payment not found"
     }
     ```
-  - **Error (400)**:
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
     ```json
     {
-      "error": "Failed to update product"
+      "error": "Authentication required"
     }
     ```
-    or
+
+---
+
+## 3. Get Payments by Order
+### Endpoint: `/payments/order/<int:order_id>`
+### Method: `GET`
+### Description
+Retrieves all payments associated with a specific order. This endpoint requires a valid user session.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+
+### Inputs (URL Parameters)
+- `order_id` (integer): The ID of the order whose payments are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "payments": [
+      {
+        "id": 456,
+        "order_id": 789,
+        "payment_method": "credit_card",
+        "payment_status": "paid",
+        "transaction_id": "txn_123456",
+        "paid_at": "2025-06-16T12:57:00"
+      }
+    ]
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "payments": [],
+    "message": "No payments found for this order"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
     ```json
     {
-      "error": "Price must be non-negative"
+      "error": "Authentication required"
     }
     ```
-    or
+
+---
+
+## 4. Update Payment
+### Endpoint: `/payments/<int:payment_id>`
+### Method: `PUT`
+### Description
+Updates the details of an existing payment. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `payment_id` (integer): The ID of the payment to update.
+- **Request Body** (Content-Type: `application/json`):
+  - **Optional Fields**:
+    - `payment_method` (string): The updated payment method (e.g., credit card, PayPal).
+    - `payment_status` (string): The updated payment status (e.g., unpaid, paid, failed).
+    - `transaction_id` (string): The updated transaction ID provided by the payment processor.
+
+**Example Request Body**:
+```json
+{
+  "payment_method": "paypal",
+  "payment_status": "failed",
+  "transaction_id": "txn_789012"
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Payment updated successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 400**: Failure to update the payment (e.g., invalid data or database error).
     ```json
     {
-      "error": "Stock quantity must be non-negative"
+      "error": "Failed to update payment"
     }
     ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
 
-### 5. Delete Product
-- **Endpoint**: `DELETE /api/products/<product_id>`
-- **Description**: Deletes a product by ID (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `product_id` (integer).
-- **Output**:
-  - **Success (200)**:
+---
+
+## 5. Delete Payment
+### Endpoint: `/payments/<int:payment_id>`
+### Method: `DELETE`
+### Description
+Deletes a payment by its ID. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `payment_id` (integer): The ID of the payment to delete.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Payment deleted successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
-      "message": "Product deleted successfully"
+      "error": "Admin privileges required"
     }
     ```
-  - **Error (404)**:
+  - **HTTP 404**: Payment with the specified ID does not exist or failed to delete.
     ```json
     {
-      "error": "Product not found or failed to delete"
+      "error": "Payment not found or failed to delete"
     }
     ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
+
+---
+
+## 6. Get All Payments (Admin Only)
+### Endpoint: `/payments`
+### Method: `GET`
+### Description
+Retrieves a paginated list of all payments in the system. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (Query Parameters)
+- `page` (integer, default: `1`): The page number for pagination.
+- `per_page` (integer, default: `20`): The number of payments per page.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "payments": [
+      {
+        "id": 456,
+        "order_id": 789,
+        "payment_method": "credit_card",
+        "payment_status": "paid",
+        "transaction_id": "txn_123456",
+        "paid_at": "2025-06-16T12:57:00"
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "per_page": 20
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
 
-### 6. Get All Products (Paginated)
-- **Endpoint**: `GET /api/products?page=<page>&per_page=<per_page>`
-- **Description**: Retrieves a paginated list of all active products.
-- **Authorization**: Public access (no JWT required).
-- **Input**:
-  - Query parameters:
-    - `page` (integer, default: 1)
-    - `per_page` (integer, default: 20)
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "products": [
-        {
-          "id": <integer>,
-          "name": <string>,
-          "description": <string>,
-          "price": <float>,
-          "stock_quantity": <integer>,
-          "category_id": <integer>,
-          "image_url": <string>,
-          "is_active": <integer>,
-          "created_at": <string>
-        },
-        ...
-      ],
-      "total": <integer>,
-      "page": <integer>,
-      "per_page": <integer>
-    }
-    ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-
-## Example Usage
-### Obtaining a JWT Token
-First, authenticate via the login endpoint (assumed to be `/api/login`):
-```bash
-curl -X POST http://localhost:5000/api/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"adminpassword"}'
-```
-Response:
-```json
-{
-  "access_token": "<your_jwt_token>"
-}
-```
-
-### Adding a Product (Admin)
-```bash
-curl -X POST http://localhost:5000/api/products -H "Authorization: Bearer <admin_token>" -H "Content-Type: application/json" -d '{"name":"Laptop","price":999.99,"stock_quantity":10,"category_id":1,"description":"High-end laptop","image_url":"http://example.com/laptop.jpg"}'
-```
-Response:
-```json
-{
-  "message": "Product added successfully",
-  "product_id": 1
-}
-```
-
-### Getting a Product by ID (Public)
-```bash
-curl -X GET http://localhost:5000/api/products/1
-```
-Response:
-```json
-{
-  "id": 1,
-  "name": "Laptop",
-  "description": "High-end laptop",
-  "price": 999.99,
-  "stock_quantity": 10,
-  "category_id": 1,
-  "image_url": "http://example.com/laptop.jpg",
-  "is_active": 1,
-  "created_at": "2025-05-23T14:18:00Z"
-}
-```
-
-### Getting Products by Category (Public)
-```bash
-curl -X GET http://localhost:5000/api/products/category/1
-```
-Response:
-```json
-{
-  "products": [
-    {
-      "id": 1,
-      "name": "Laptop",
-      "description": "High-end laptop",
-      "price": 999.99,
-      "stock_quantity": 10,
-      "category_id": 1,
-      "image_url": "http://example.com/laptop.jpg",
-      "is_active": 1,
-      "created_at": "2025-05-23T14:18:00Z"
-    }
-  ]
-}
-```
+---
 
 ## Notes
-- **Database Manager**: The API relies on `ProductManager` for database operations.
-- **Error Handling**: All endpoints return appropriate HTTP status codes and error messages. Errors are logged for debugging.
-- **Security**: Only active products (`is_active: 1`) are returned in public endpoints. Admin endpoints require a valid JWT with admin privileges.
-- **Testing**: Unit tests are available in `test/test_products.py` to verify functionality.
-- **Data Validation**: Price and stock quantity are validated to be non-negative in `POST` and `PUT` endpoints.
-
-For further details, refer to the source code in `admin_apis/products.py`.
+- All endpoints interact with the database through the `PaymentManager` class.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` for debugging and monitoring purposes.
+- The `paid_at` field in responses is a timestamp indicating when the payment was processed (format: `YYYY-MM-DDTHH:MM:SS`).
+- Error responses include a descriptive `error` field to assist clients in troubleshooting.
+- The `GET /payments/order/<int:order_id>` endpoint returns an empty list with a message if no payments are found for the specified order.
+- The `POST /payments`, `GET /payments/<int:payment_id>`, and `GET /payments/order/<int:order_id>` endpoints are accessible to authenticated users, while `PUT`, `DELETE`, and `GET /payments` endpoints are restricted to admins.

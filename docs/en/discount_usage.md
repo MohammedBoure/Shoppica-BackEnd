@@ -1,321 +1,319 @@
 # Discount Usages API Documentation
 
-This document provides detailed information about the Discount Usages API endpoints defined in `admin_apis/discount_usages.py`. These endpoints manage discount usage records in an e-commerce platform, tracking when users apply discount codes. Authentication and authorization are enforced using JWT (JSON Web Tokens) with specific roles (`@jwt_required()` for authenticated users and `@admin_required` for admins).
-
-## Base URL
-All endpoints are prefixed with `/api`. For example, `/discount_usages` is accessed as `/api/discount_usages`.
+This document provides detailed information about the Discount Usages API endpoints implemented in the Flask Blueprint `discount_usages`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- **JWT Token**: Required for endpoints marked with `@jwt_required()` or `@admin_required`. Include the token in the `Authorization` header as `Bearer <token>`.
-- **Admin Privileges**: Endpoints marked with `@admin_required` require a JWT token with `is_admin: true`.
-- **User Access**: Endpoints with `@jwt_required()` allow authenticated users to access their own discount usage records, with validation to ensure the `user_id` matches the authenticated user’s identity.
+- The endpoint for adding a discount usage (`POST /discount_usages`) and retrieving discount usages by user (`GET /discount_usages/user/<int:user_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
+- Endpoints for retrieving a specific discount usage (`GET /discount_usages/<int:usage_id>`), retrieving discount usages by discount (`GET /discount_usages/discount/<int:discount_id>`), deleting a discount usage (`DELETE /discount_usages/<int:usage_id>`), and retrieving all discount usages (`GET /discount_usages`) require admin privileges, enforced by the `@admin_required` decorator.
+- Non-admin users can only add or view discount usages associated with their own `user_id` (`user_id` must match `session['user_id']`).
+- The `DiscountUsageManager` class handles all database interactions for discount usage-related operations.
 
-## Endpoints
+---
 
-### 1. Add Discount Usage
-- **Endpoint**: `POST /api/discount_usages`
-- **Description**: Adds a new discount usage record, linking a discount to a user (e.g., during checkout).
-- **Authorization**: Requires `@jwt_required()`. The `user_id` in the request must match the authenticated user’s ID.
-- **Input**:
+## 1. Add a New Discount Usage
+### Endpoint: `/discount_usages`
+### Method: `POST`
+### Description
+Records a new usage of a discount by a user. Only the authenticated user can add a discount usage for themselves.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+- The `user_id` in the request must match the `current_user_id` from the session.
+
+### Inputs (Request Body)
+- **Content-Type**: `application/json`
+- **Required Fields**:
+  - `discount_id` (integer): The ID of the discount being used.
+  - `user_id` (integer): The ID of the user applying the discount.
+  
+**Example Request Body**:
+```json
+{
+  "discount_id": 123,
+  "user_id": 456
+}
+```
+
+### Outputs
+- **Success Response** (HTTP 201):
   ```json
   {
-    "discount_id": <integer>, // Required: ID of the discount
-    "user_id": <integer>     // Required: ID of the user (must match JWT identity)
+    "message": "Discount usage added successfully",
+    "usage_id": 789
   }
   ```
-- **Output**:
-  - **Success (201)**:
+- **Error Responses**:
+  - **HTTP 400**: Invalid JSON payload, missing required fields (`discount_id` or `user_id`), or invalid `discount_id` or `user_id` (not positive integers).
     ```json
     {
-      "message": "Discount usage added successfully",
-      "usage_id": <integer>
+      "error": "Invalid JSON payload"
     }
     ```
-  - **Error (400)**:
     ```json
     {
       "error": "Discount ID and user ID are required"
     }
     ```
-    or
     ```json
     {
       "error": "Discount ID must be a positive integer"
     }
     ```
-    or
     ```json
     {
       "error": "User ID must be a positive integer"
     }
     ```
-  - **Error (403)**:
+  - **HTTP 403**: Unauthorized attempt to add a discount usage for another user (`user_id` does not match `current_user_id`).
     ```json
     {
       "error": "Unauthorized: User ID does not match authenticated user"
     }
     ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when failing to add the discount usage to the database.
     ```json
     {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (401, if no JWT)**:
-    ```json
-    {
-      "msg": "Missing Authorization Header"
+      "error": "Failed to add discount usage"
     }
     ```
 
-### 2. Get Discount Usage by ID
-- **Endpoint**: `GET /api/discount_usages/<usage_id>`
-- **Description**: Retrieves a discount usage record by its ID (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `usage_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "id": <integer>,
-      "discount_id": <integer>,
-      "user_id": <integer>,
-      "used_at": <string>
-    }
-    ```
-  - **Error (404)**:
+---
+
+## 2. Get Discount Usage by ID
+### Endpoint: `/discount_usages/<int:usage_id>`
+### Method: `GET`
+### Description
+Retrieves the details of a specific discount usage by its ID. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (URL Parameters)
+- `usage_id` (integer): The ID of the discount usage to retrieve.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "id": 789,
+    "discount_id": 123,
+    "user_id": 456,
+    "used_at": "2025-06-16T13:04:00"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 404**: Discount usage with the specified ID does not exist.
     ```json
     {
       "error": "Discount usage not found"
     }
     ```
-  - **Error (500)**:
-    ```json
-    {
-      "error": "Internal server error"
-    }
-    ```
-  - **Error (403, if not admin)**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-
-### 3. Get Discount Usages by Discount
-- **Endpoint**: `GET /api/discount_usages/discount/<discount_id>`
-- **Description**: Retrieves all discount usage records for a specific discount (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `discount_id` (integer).
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "discount_usages": [
-        {
-          "id": <integer>,
-          "discount_id": <integer>,
-          "user_id": <integer>,
-          "used_at": <string>
-        },
-        ...
-      ]
-    }
-    ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when retrieving the discount usage.
     ```json
     {
       "error": "Internal server error"
     }
     ```
-  - **Error (403, if not admin)**:
+
+---
+
+## 3. Get Discount Usages by Discount
+### Endpoint: `/discount_usages/discount/<int:discount_id>`
+### Method: `GET`
+### Description
+Retrieves all discount usages for a specific discount. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (URL Parameters)
+- `discount_id` (integer): The ID of the discount whose usages are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "discount_usages": [
+      {
+        "id": 789,
+        "discount_id": 123,
+        "user_id": 456,
+        "used_at": "2025-06-16T13:04:00"
+      }
+    ]
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "discount_usages": []
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-
-### 4. Get Discount Usages by User
-- **Endpoint**: `GET /api/discount_usages/user/<user_id>`
-- **Description**: Retrieves all Investigator: all discount usage records for a specific user. The `user_id` must match the authenticated user’s ID.
-- **Authorization**: Requires `@jwt_required()`. The `user_id` in the request must match the authenticated user’s ID.
-- **Input**: URL parameter `user_id` (integer).
-- **Output**:
-  - **Success (200)**:
+  - **HTTP 500**: Server error when retrieving discount usages.
     ```json
     {
-      "discount_usages": [
-        {
-          "id": <integer>,
-          "discount_id": <integer>,
-          "user_id": <integer>,
-          "used_at": <string>
-        },
-        ...
-      ]
+      "error": "Internal server error"
     }
     ```
-  - **Error (403)**:
+
+---
+
+## 4. Get Discount Usages by User
+### Endpoint: `/discount_usages/user/<int:user_id>`
+### Method: `GET`
+### Description
+Retrieves all discount usages for a specific user. Only the authenticated user can view their own discount usages.
+
+### Authentication
+- Requires a valid session (`@session_required`).
+- The `user_id` in the request must match the `current_user_id` from the session.
+
+### Inputs (URL Parameters)
+- `user_id` (integer): The ID of the user whose discount usages are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "discount_usages": [
+      {
+        "id": 789,
+        "discount_id": 123,
+        "user_id": 456,
+        "used_at": "2025-06-16T13:04:00"
+      }
+    ]
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "discount_usages": []
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Unauthorized attempt to access another user's discount usages (`user_id` does not match `current_user_id`).
     ```json
     {
       "error": "Unauthorized: User ID does not match authenticated user"
     }
     ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when retrieving discount usages.
     ```json
     {
       "error": "Internal server error"
     }
     ```
-  - **Error (401, if no JWT)**:
-    ```json
-    {
-      "msg": "Missing Authorization Header"
-    }
-    ```
 
-### 5. Delete Discount Usage
-- **Endpoint**: `DELETE /api/discount_usages/<usage_id>`
-- **Description**: Deletes a discount usage record by ID (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**: URL parameter `usage_id` (integer).
-- **Output**:
-  - **Success (200)**:
+---
+
+## 5. Delete Discount Usage
+### Endpoint: `/discount_usages/<int:usage_id>`
+### Method: `DELETE`
+### Description
+Deletes a discount usage by its ID. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- **URL Parameters**:
+  - `usage_id` (integer): The ID of the discount usage to delete.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "message": "Discount usage deleted successfully"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
-      "message": "Discount usage deleted successfully"
+      "error": "Admin privileges required"
     }
     ```
-  - **Error (404)**:
+  - **HTTP 404**: Discount usage with the specified ID does not exist or failed to delete.
     ```json
     {
       "error": "Discount usage not found or failed to delete"
     }
     ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when deleting the discount usage.
     ```json
     {
       "error": "Internal server error"
     }
     ```
-  - **Error (403, if not admin)**:
+
+---
+
+## 6. Get All Discount Usages (Admin Only)
+### Endpoint: `/discount_usages`
+### Method: `GET`
+### Description
+Retrieves a paginated list of all discount usages in the system. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (Query Parameters)
+- `page` (integer, default: `1`): The page number for pagination.
+- `per_page` (integer, default: `20`): The number of discount usages per page.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "discount_usages": [
+      {
+        "id": 789,
+        "discount_id": 123,
+        "user_id": 456,
+        "used_at": "2025-06-16T13:04:00",
+        "discount_code": "SUMMER25"
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "per_page": 20
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
     }
     ```
-
-### 6. Get All Discount Usages (Paginated)
-- **Endpoint**: `GET /api/discount_usages?page=<page>&per_page=<per_page>`
-- **Description**: Retrieves a paginated list of all discount usage records (admin-only).
-- **Authorization**: Requires `@admin_required` (JWT token with `is_admin: true`).
-- **Input**:
-  - Query parameters:
-    - `page` (integer, default: 1)
-    - `per_page` (integer, default: 20)
-- **Output**:
-  - **Success (200)**:
-    ```json
-    {
-      "discount_usages": [
-        {
-          "id": <integer>,
-          "discount_id": <integer>,
-          "user_id": <integer>,
-          "used_at": <string>,
-          "discount_code": <string>
-        },
-        ...
-      ],
-      "total": <integer>,
-      "page": <integer>,
-      "per_page": <integer>
-    }
-    ```
-  - **Error (500)**:
+  - **HTTP 500**: Server error when retrieving discount usages.
     ```json
     {
       "error": "Internal server error"
     }
     ```
-  - **Error (403, if not admin)**:
-    ```json
-    {
-      "error": "Admin privileges required"
-    }
-    ```
 
-## Example Usage
-### Obtaining a JWT Token
-First, authenticate via the login endpoint (assumed to be `/api/login`):
-```bash
-curl -X POST http://localhost:5000/api/login -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"adminpassword"}'
-```
-Response:
-```json
-{
-  "access_token": "<your_jwt_token>"
-}
-```
-
-### Adding a Discount Usage (User)
-```bash
-curl -X POST http://localhost:5000/api/discount_usages -H "Authorization: Bearer <user_token>" -H "Content-Type: application/json" -d '{"discount_id":1,"user_id":1}'
-```
-Response:
-```json
-{
-  "message": "Discount usage added successfully",
-  "usage_id": 1
-}
-```
-
-### Getting Discount Usages by User (User)
-```bash
-curl -X GET http://localhost:5000/api/discount_usages/user/1 -H "Authorization: Bearer <user_token>"
-```
-Response:
-```json
-{
-  "discount_usages": [
-    {
-      "id": 1,
-      "discount_id": 1,
-      "user_id": 1,
-      "used_at": "2025-05-23T14:18:00Z"
-    }
-  ]
-}
-```
-
-### Getting All Discount Usages (Admin)
-```bash
-curl -X GET http://localhost:5000/api/discount_usages?page=1&per_page=10 -H "Authorization: Bearer <admin_token>"
-```
-Response:
-```json
-{
-  "discount_usages": [
-    {
-      "id": 1,
-      "discount_id": 1,
-      "user_id": 1,
-      "used_at": "2025-05-23T14:18:00Z",
-      "discount_code": "SAVE10"
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "per_page": 10
-}
-```
+---
 
 ## Notes
-- **Database Manager**: The API relies on `DiscountUsageManager` for database operations.
-- **Error Handling**: All endpoints return appropriate HTTP status codes and error messages. Errors are logged for debugging.
-- **Security**: User endpoints validate that the `user_id` matches the authenticated user’s ID. Admin endpoints require a valid JWT with admin privileges.
-- **Data Validation**: Discount ID and user ID are validated to be positive integers.
-- **Testing**: Unit tests can be created in `test/test_discount_usages.py` to verify functionality.
-- **Discount Code**: The `discount_code` field in `GET /api/discount_usages` assumes the `DiscountUsageManager` returns a `code` field (e.g., via a database join with the discounts table). If not supported, remove this field from the response.
-
-For further details, refer to the source code in `admin_apis/discount_usages.py`.
+- All endpoints interact with the database through the `DiscountUsageManager` class.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` with a dedicated logger (`logger = logging.getLogger(__name__)`) for debugging and monitoring.
+- The `used_at` field in responses is a timestamp indicating when the discount was used (format: `YYYY-MM-DDTHH:MM:SS`, or empty string if not available).
+- The `discount_code` field is included in the response for the `GET /discount_usages` endpoint to provide additional context.
+- Error responses include a descriptive `error` field to assist clients in troubleshooting.
+- The `POST /discount_usages` and `GET /discount_usages/user/<int:user_id>` endpoints are accessible to authenticated users, but only for their own `user_id`.
+- The `GET /discount_usages/discount/<int:discount_id>`, `GET /discount_usages/<int:usage_id>`, `DELETE /discount_usages/<int:usage_id>`, and `GET /discount_usages` endpoints are restricted to admins.

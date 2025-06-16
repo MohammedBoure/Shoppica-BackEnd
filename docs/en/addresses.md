@@ -1,47 +1,45 @@
-# Address API Documentation
+# Addresses API Documentation
 
-This document provides detailed information about the Address API endpoints implemented in the Flask Blueprint `addresses`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
+This document provides detailed information about the Addresses API endpoints implemented in the Flask Blueprint `addresses`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- All endpoints require JWT authentication using the `@jwt_required()` decorator.
-- Some endpoints (e.g., `/api/addresses`) require admin privileges, enforced by the `@admin_required` decorator.
-- The `current_user_id` is extracted from the JWT token, and the `is_admin` claim determines if the user has admin privileges.
+- Endpoints for adding (`POST /addresses`), retrieving a user's own addresses (`GET /addresses/me`), retrieving a specific address (`GET /addresses/<int:address_id>`), updating an address (`PUT /addresses/<int:address_id>`), and deleting an address (`DELETE /addresses/<int:address_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
+- The custom `@check_address_ownership` decorator is used for `GET`, `PUT`, and `DELETE` operations on specific addresses, ensuring that the authenticated user owns the address (`user_id` matches `session['user_id']`) or is an admin (`is_admin` is `True`).
+- Endpoints for retrieving all addresses for a specific user (`GET /admin/addresses/user/<int:user_id>`) and retrieving all addresses with pagination (`GET /admin/addresses`) require admin privileges, enforced by the `@admin_required` decorator.
+- The `AddressManager` class handles all database interactions for address-related operations.
 
 ---
 
 ## 1. Add a New Address
-### Endpoint: `/api/addresses`
+### Endpoint: `/addresses`
 ### Method: `POST`
 ### Description
-Adds a new address for a user. The address can only be added for the authenticated user unless the requester is an admin.
+Adds a new address for the authenticated user. The `user_id` is automatically taken from the session, ensuring users can only add addresses for themselves.
 
 ### Authentication
-- Requires a valid JWT token.
-- Non-admin users can only add addresses for themselves.
+- Requires a valid session (`@session_required`).
 
 ### Inputs (Request Body)
 - **Content-Type**: `application/json`
 - **Required Fields**:
-  - `user_id` (integer): The ID of the user to associate with the address.
   - `address_line1` (string): The primary address line.
   - `city` (string): The city of the address.
   - `country` (string): The country of the address.
 - **Optional Fields**:
-  - `address_line2` (string): The secondary address line (optional).
-  - `state` (string): The state or region (optional).
-  - `postal_code` (string): The postal code (optional).
-  - `is_default` (boolean, default: `0`): Indicates if the address is the default for the user.
+  - `address_line2` (string): The secondary address line.
+  - `state` (string): The state or region of the address.
+  - `postal_code` (string): The postal or ZIP code.
+  - `is_default` (boolean, default: `false`): Whether this is the user's default address.
 
 **Example Request Body**:
 ```json
 {
-  "user_id": 1,
   "address_line1": "123 Main St",
-  "city": "New York",
+  "city": "Springfield",
   "country": "USA",
   "address_line2": "Apt 4B",
-  "state": "NY",
-  "postal_code": "10001",
+  "state": "IL",
+  "postal_code": "62701",
   "is_default": true
 }
 ```
@@ -50,41 +48,101 @@ Adds a new address for a user. The address can only be added for the authenticat
 - **Success Response** (HTTP 201):
   ```json
   {
-    "message": "Address added successfully",
-    "address_id": 123
+    "id": 456,
+    "user_id": 789,
+    "address_line1": "123 Main St",
+    "address_line2": "Apt 4B",
+    "city": "Springfield",
+    "state": "IL",
+    "postal_code": "62701",
+    "country": "USA",
+    "is_default": true
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Missing required fields.
+  - **HTTP 400**: Invalid JSON payload or missing required fields (`address_line1`, `city`, or `country`).
     ```json
     {
-      "error": "User ID, address line 1, city, and country are required"
+      "error": "Request body must be JSON"
     }
     ```
-  - **HTTP 403**: Unauthorized to add an address for another user.
     ```json
     {
-      "error": "Unauthorized to add address for another user"
+      "error": "address_line1, city, and country are required"
     }
     ```
-  - **HTTP 500**: Failed to add the address.
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
     ```json
     {
-      "error": "Failed to add address"
+      "error": "Authentication required"
+    }
+    ```
+  - **HTTP 500**: Server error when failing to add the address to the database.
+    ```json
+    {
+      "error": "An internal server error occurred"
     }
     ```
 
 ---
 
-## 2. Get Address by ID
-### Endpoint: `/api/addresses/<int:address_id>`
+## 2. Get User's Addresses
+### Endpoint: `/addresses/me`
 ### Method: `GET`
 ### Description
-Retrieves the details of a specific address by its ID. Only the address owner or an admin can access the address.
+Retrieves all addresses for the currently authenticated user.
 
 ### Authentication
-- Requires a valid JWT token.
-- Non-admin users can only access their own addresses.
+- Requires a valid session (`@session_required`).
+
+### Inputs
+- None.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  [
+    {
+      "id": 456,
+      "user_id": 789,
+      "address_line1": "123 Main St",
+      "address_line2": "Apt 4B",
+      "city": "Springfield",
+      "state": "IL",
+      "postal_code": "62701",
+      "country": "USA",
+      "is_default": true
+    }
+  ]
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  []
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Invalid or missing session (user not authenticated).
+    ```json
+    {
+      "error": "Authentication required"
+    }
+    ```
+  - **HTTP 500**: Server error when retrieving addresses.
+    ```json
+    {
+      "error": "An internal server error occurred"
+    }
+    ```
+
+---
+
+## 3. Get Address by ID
+### Endpoint: `/addresses/<int:address_id>`
+### Method: `GET`
+### Description
+Retrieves a specific address by its ID. Only the user who owns the address or an admin can access it.
+
+### Authentication
+- Requires a valid session (`@session_required`) and ownership verification (`@check_address_ownership`).
 
 ### Inputs (URL Parameters)
 - `address_id` (integer): The ID of the address to retrieve.
@@ -93,112 +151,62 @@ Retrieves the details of a specific address by its ID. Only the address owner or
 - **Success Response** (HTTP 200):
   ```json
   {
-    "id": 123,
-    "user_id": 1,
+    "id": 456,
+    "user_id": 789,
     "address_line1": "123 Main St",
     "address_line2": "Apt 4B",
-    "city": "New York",
-    "state": "NY",
-    "postal_code": "10001",
+    "city": "Springfield",
+    "state": "IL",
+    "postal_code": "62701",
     "country": "USA",
     "is_default": true
   }
   ```
 - **Error Responses**:
-  - **HTTP 404**: Address not found.
-    ```json
-    {
-      "error": "Address not found"
-    }
-    ```
-  - **HTTP 403**: Unauthorized to access the address.
+  - **HTTP 403**: Unauthorized access to the address (non-owner and non-admin user).
     ```json
     {
       "error": "Unauthorized access to this address"
     }
     ```
-
----
-
-## 3. Get Addresses by User
-### Endpoint: `/api/addresses/user/<int:user_id>`
-### Method: `GET`
-### Description
-Retrieves all addresses associated with a specific user. Only the user or an admin can access the addresses.
-
-### Authentication
-- Requires a valid JWT token.
-- Non-admin users can only view their own addresses.
-
-### Inputs (URL Parameters)
-- `user_id` (integer): The ID of the user whose addresses are to be retrieved.
-
-### Outputs
-- **Success Response** (HTTP 200):
-  - If addresses are found:
+  - **HTTP 404**: Address with the specified ID does not exist.
     ```json
     {
-      "addresses": [
-        {
-          "id": 123,
-          "user_id": 1,
-          "address_line1": "123 Main St",
-          "address_line2": "Apt 4B",
-          "city": "New York",
-          "state": "NY",
-          "postal_code": "10001",
-          "country": "USA",
-          "is_default": true
-        },
-        ...
-      ]
+      "error": "Address not found"
     }
     ```
-  - If no addresses are found:
-    ```json
-    {
-      "addresses": [],
-      "message": "No addresses found for this user"
-    }
-    ```
-- **Error Response**:
-  - **HTTP 403**: Unauthorized to view addresses for another user.
-    ```json
-    {
-      "error": "Unauthorized to view addresses for another user"
-    }
-    ```
+  - **HTTP 500**: Server error when retrieving the address (handled by `@check_address_ownership`).
 
 ---
 
 ## 4. Update Address
-### Endpoint: `/api/addresses/<int:address_id>`
+### Endpoint: `/addresses/<int:address_id>`
 ### Method: `PUT`
 ### Description
-Updates the details of an existing address. Only the address owner or an admin can update the address.
+Updates the details of a specific address. Only the user who owns the address or an admin can update it.
 
 ### Authentication
-- Requires a valid JWT token.
-- Non-admin users can only update their own addresses.
+- Requires a valid session (`@session_required`) and ownership verification (`@check_address_ownership`).
 
 ### Inputs
 - **URL Parameters**:
   - `address_id` (integer): The ID of the address to update.
 - **Request Body** (Content-Type: `application/json`):
-  - **Optional Fields** (only include fields to update):
-    - `address_line1` (string): The primary address line.
-    - `address_line2` (string): The secondary address line.
-    - `city` (string): The city of the address.
-    - `state` (string): The state or region.
-    - `postal_code` (string): The postal code.
-    - `country` (string): The country of the address.
-    - `is_default` (boolean): Indicates if the address is the default.
+  - **Optional Fields**:
+    - `address_line1` (string): The updated primary address line.
+    - `address_line2` (string): The updated secondary address line.
+    - `city` (string): The updated city.
+    - `state` (string): The updated state or region.
+    - `postal_code` (string): The updated postal or ZIP code.
+    - `country` (string): The updated country.
+    - `is_default` (boolean): The updated default status.
 
 **Example Request Body**:
 ```json
 {
-  "address_line1": "456 New St",
-  "city": "Boston",
+  "address_line1": "456 Oak St",
+  "city": "Springfield",
+  "country": "USA",
   "is_default": false
 }
 ```
@@ -207,40 +215,58 @@ Updates the details of an existing address. Only the address owner or an admin c
 - **Success Response** (HTTP 200):
   ```json
   {
-    "message": "Address updated successfully"
+    "id": 456,
+    "user_id": 789,
+    "address_line1": "456 Oak St",
+    "address_line2": "Apt 4B",
+    "city": "Springfield",
+    "state": "IL",
+    "postal_code": "62701",
+    "country": "USA",
+    "is_default": false
   }
   ```
 - **Error Responses**:
-  - **HTTP 404**: Address not found.
+  - **HTTP 400**: Invalid JSON payload or failure to update the address.
+    ```json
+    {
+      "error": "Request body must be JSON"
+    }
+    ```
+    ```json
+    {
+      "error": "Failed to update address"
+    }
+    ```
+  - **HTTP 403**: Unauthorized access to the address (non-owner and non-admin user).
+    ```json
+    {
+      "error": "Unauthorized access to this address"
+    }
+    ```
+  - **HTTP 404**: Address with the specified ID does not exist.
     ```json
     {
       "error": "Address not found"
     }
     ```
-  - **HTTP 403**: Unauthorized to update the address.
+  - **HTTP 500**: Server error when updating the address.
     ```json
     {
-      "error": "Unauthorized to update this address"
-    }
-    ```
-  - **HTTP 400**: Failed to update the address (e.g., invalid data).
-    ```json
-    {
-      "error": "Failed to update address"
+      "error": "An internal server error occurred"
     }
     ```
 
 ---
 
 ## 5. Delete Address
-### Endpoint: `/api/addresses/<int:address_id>`
+### Endpoint: `/addresses/<int:address_id>`
 ### Method: `DELETE`
 ### Description
-Deletes an address by its ID. Only the address owner or an admin can delete the address.
+Deletes a specific address by its ID. Only the user who owns the address or an admin can delete it.
 
 ### Authentication
-- Requires a valid JWT token.
-- Non-admin users can only delete their own addresses.
+- Requires a valid session (`@session_required`) and ownership verification (`@check_address_ownership`).
 
 ### Inputs
 - **URL Parameters**:
@@ -254,29 +280,84 @@ Deletes an address by its ID. Only the address owner or an admin can delete the 
   }
   ```
 - **Error Responses**:
-  - **HTTP 404**: Address not found or failed to delete.
+  - **HTTP 403**: Unauthorized access to the address (non-owner and non-admin user).
+    ```json
+    {
+      "error": "Unauthorized access to this address"
+    }
+    ```
+  - **HTTP 404**: Address with the specified ID does not exist or failed to delete.
     ```json
     {
       "error": "Address not found or failed to delete"
     }
     ```
-  - **HTTP 403**: Unauthorized to delete the address.
+  - **HTTP 500**: Server error when deleting the address.
     ```json
     {
-      "error": "Unauthorized to delete this address"
+      "error": "An internal server error occurred"
     }
     ```
 
 ---
 
-## 6. Get All Addresses (Admin Only)
-### Endpoint: `/api/addresses`
+## 6. Get Addresses by User (Admin Only)
+### Endpoint: `/admin/addresses/user/<int:user_id>`
+### Method: `GET`
+### Description
+Retrieves all addresses for a specific user. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs (URL Parameters)
+- `user_id` (integer): The ID of the user whose addresses are to be retrieved.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  [
+    {
+      "id": 456,
+      "user_id": 789,
+      "address_line1": "123 Main St",
+      "address_line2": "Apt 4B",
+      "city": "Springfield",
+      "state": "IL",
+      "postal_code": "62701",
+      "country": "USA",
+      "is_default": true
+    }
+  ]
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  []
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
+    ```json
+    {
+      "error": "Admin privileges required"
+    }
+    ```
+  - **HTTP 500**: Server error when retrieving addresses.
+    ```json
+    {
+      "error": "An internal server error occurred"
+    }
+    ```
+
+---
+
+## 7. Get All Addresses (Admin Only)
+### Endpoint: `/admin/addresses`
 ### Method: `GET`
 ### Description
 Retrieves a paginated list of all addresses in the system. This endpoint is restricted to admin users only.
 
 ### Authentication
-- Requires a valid JWT token with admin privileges (`@admin_required`).
+- Requires a valid session with admin privileges (`@admin_required`).
 
 ### Inputs (Query Parameters)
 - `page` (integer, default: `1`): The page number for pagination.
@@ -288,28 +369,43 @@ Retrieves a paginated list of all addresses in the system. This endpoint is rest
   {
     "addresses": [
       {
-        "id": 123,
-        "user_id": 1,
+        "id": 456,
+        "user_id": 789,
         "address_line1": "123 Main St",
         "address_line2": "Apt 4B",
-        "city": "New York",
-        "state": "NY",
-        "postal_code": "10001",
+        "city": "Springfield",
+        "state": "IL",
+        "postal_code": "62701",
         "country": "USA",
         "is_default": true
-      },
-      ...
+      }
     ],
     "total": 50,
     "page": 1,
     "per_page": 20
   }
   ```
+- **Error Responses**:
+  - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
+    ```json
+    {
+      "error": "Admin privileges required"
+    }
+    ```
+  - **HTTP 500**: Server error when retrieving addresses.
+    ```json
+    {
+      "error": "An internal server error occurred"
+    }
+    ```
 
 ---
 
 ## Notes
-- All endpoints use the `AddressManager` class to interact with the database.
-- Logging is configured with `logging.basicConfig(level=logging.INFO)` for debugging and monitoring.
-- The `is_default` field is stored as a boolean (`0` or `1`) in the database but can be provided as a boolean (`true` or `false`) in the request body.
-- Error responses include a descriptive `error` field to help clients understand the issue.
+- All endpoints interact with the database through the `AddressManager` class.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` with a dedicated logger (`logger = logging.getLogger(__name__)`) for debugging and monitoring.
+- The custom `@check_address_ownership` decorator ensures that users can only access their own addresses unless they are admins, and it optimizes database access by passing the fetched address to the route handler via Flask's `g` object.
+- Error responses include a descriptive `error` field to assist clients in troubleshooting.
+- The `POST /addresses` endpoint automatically uses the authenticated user's ID (`session['user_id']`) to prevent users from adding addresses for other users.
+- The `PUT /addresses/<int:address_id>` endpoint allows partial updates, where only provided fields are modified.
+- Admin-only endpoints (`GET /admin/addresses/user/<int:user_id>` and `GET /admin/addresses`) provide visibility into all addresses for administrative purposes.
