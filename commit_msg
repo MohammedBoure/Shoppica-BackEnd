@@ -1,5 +1,1 @@
-fix(auth): correct admin permission handling in session
-
-Fixed an issue where session['is_admin'] was incorrectly set to false
-despite correct authentication. Now the admin status is stored properly
-upon login and used consistently in route protection.
+chore(cors): add shoppica-testsite.onrender.com to allowed origins
