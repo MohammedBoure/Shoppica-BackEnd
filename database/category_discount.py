@@ -6,7 +6,6 @@ class CategoryDiscountManager(Database):
     """Manages operations for the category_discounts table in the database."""
 
     def add_category_discount(self, category_id, discount_percent, starts_at=None, ends_at=None, is_active=1):
-        """Adds a new discount for a category."""
         try:
             with self.get_db_connection() as conn:
                 cursor = conn.cursor()
@@ -19,8 +18,9 @@ class CategoryDiscountManager(Database):
                 logging.info(f"Category discount added for category {category_id} with ID: {discount_id}")
                 return discount_id
         except sqlite3.Error as e:
-            logging.error(f"Error adding category discount for category {category_id}: {e}")
+            logging.error(f"SQLite error adding category discount: {e}")
             return None
+
 
     def get_category_discount_by_id(self, discount_id):
         """Retrieves a category discount by its ID."""

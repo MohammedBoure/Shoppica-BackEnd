@@ -1,1 +1,1 @@
-Fix: Replace .get() with dict-style access for sqlite3.Row compatibility in discount usage endpoints
+fix: correct and refactor all APIs in apis/category_discounts.py
