@@ -152,7 +152,7 @@ def get_addresses_by_user_as_admin(user_id):
     """(Admin) API to retrieve all addresses for a specific user."""
     try:
         addresses = address_manager.get_addresses_by_user(user_id)
-        return jsonify(addresses), 200
+        return jsonify([dict(row) for row in addresses]), 200
     except Exception as e:
         logger.error(f"Admin error getting addresses for user {user_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
@@ -166,8 +166,9 @@ def get_all_addresses_paginated():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         addresses, total = address_manager.get_addresses(page, per_page)
+        address_dicts = [dict(row) for row in addresses]
         return jsonify({
-            'addresses': addresses,
+            'addresses': address_dicts,
             'total': total,
             'page': page,
             'per_page': per_page

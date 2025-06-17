@@ -1,6 +1,5 @@
-fix(address): handle missing address and ensure JSON serialization
+fix: convert Row objects to dict before jsonify in admin endpoints
 
-- Convert address Row object to dict before returning in JSON response
-- Improve logging clarity when address is not found
-- Include user ID and admin status in missing address warnings
-- Ensure 404 response is properly returned if address does not exist
+- Fixed TypeError caused by attempting to jsonify sqlite3.Row objects
+- Applied conversion to dict in both get_addresses_by_user_as_admin and get_all_addresses_paginated
+- Ensured consistent and valid JSON responses in admin endpoints
