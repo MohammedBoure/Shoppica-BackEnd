@@ -64,4 +64,4 @@ API details are in `/docs/en/`:
 
 ## License
 
-MIT License.
+MIT License.# Shoppica-FrontEnd

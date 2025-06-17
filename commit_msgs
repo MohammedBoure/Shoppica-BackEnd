@@ -14,3 +14,14 @@ fix(docs): update documentation to reflect latest changes
 -----
 
 refactor(app): restructure to use session-based architecture and fix authentication docs
+-----
+
+chore(cors): allow https://shoppica-26gr.onrender.com in CORS policy
+
+-----
+
+chore(cors): allow https://shoppica-26gr.onrender.com in CORS policy
+
+-----
+
+chore(cors): allow https://shoppica-26gr.onrender.com in CORS policy
