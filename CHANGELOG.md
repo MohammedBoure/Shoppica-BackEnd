@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.5.0] - 2025-06-18
+
+### Features
+- **product_images**: Added a new `product_images` table to support multiple images per product.
+  - Created API endpoints for uploading and retrieving images.
+  - Updated related documentation to include `product_images`.
+
+### Fixes
+- **Authentication**
+  - Fixed admin permission bug where `session['is_admin']` was incorrectly set to false.
+  - Ensured admin status is correctly set and used in route protection.
+
+- **Serialization**
+  - Converted all `sqlite3.Row` objects to `dict` before using `jsonify` to prevent `TypeError`.
+  - Applied to various APIs: addresses, admin endpoints, cart items, discounts.
+  - Ensured consistent and valid JSON responses across all endpoints.
+
+- **Address API**
+  - Handled missing addresses with clear logging (includes user ID and admin status).
+  - Returned proper 404 response if address does not exist.
+
+- **Cart Items**
+  - Improved error handling and logging using `logger.error(exc_info=True)`.
+  - Applied session-based ownership checks using decorators.
+  - Optimized DB calls by reusing fetched items.
+
+- **Discount Endpoints**
+  - Replaced `.get()` calls with dict-style access to maintain compatibility with `sqlite3.Row`.
+
+- **Category Discounts**
+  - Fixed and refactored all APIs in `apis/category_discounts.py`.
+
+### Refactors
+- **Session-Based Architecture**
+  - Restructured app to use session-based authentication and user state handling.
+  - Updated authentication documentation accordingly.
+
+### Chores
+- **CORS Policy**
+  - Allowed `https://shoppica-26gr.onrender.com` in CORS.
+  - Added `shoppica-testsite.onrender.com` to allowed origins.
+
+- **Documentation**
+  - Updated docs to reflect latest changes in architecture, APIs, and database structure.
+
 ## [0.4.0] - 2025-06-16
 
 ### Changed
