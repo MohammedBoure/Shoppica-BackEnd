@@ -1,6 +1,9 @@
-feat: add product_images table with API endpoints and documentation updates
+fix: serialize SQLite Row objects in cart item APIs and improve error handling
 
-- Added new `product_images` table to store multiple images per product
-- Implemented API endpoints for uploading and retrieving product images
-- Updated database schema documentation to include `product_images`
-- Modified product-related API documentation to reference image endpoints
+- Fixed TypeError caused by returning sqlite3.Row directly in Flask's jsonify
+- Wrapped all fetched rows with dict() before JSON serialization (single + list)
+- Ensured compatibility across all cart item endpoints (user & admin)
+- Improved error logging using logger.error with exc_info=True
+- Applied ownership checks using session-based decorator with g.cart_item injection
+- Refactored decorator to reduce DB calls by reusing fetched item
+- Aligned API behavior with updated documentation and consistent response formats
