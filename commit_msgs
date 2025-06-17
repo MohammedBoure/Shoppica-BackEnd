@@ -29,3 +29,11 @@ upon login and used consistently in route protection.
 -----
 
 chore(cors): add shoppica-testsite.onrender.com to allowed origins
+
+-----
+
+fix(addresses): ensure Row objects are converted to dict for JSON serialization
+
+Fixed a TypeError caused by attempting to jsonify a database Row object.
+Now all Row results are converted to dictionaries before being returned 
+in the API response.

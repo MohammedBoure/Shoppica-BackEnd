@@ -76,7 +76,7 @@ def add_address():
         )
         if address_id:
             new_address = address_manager.get_address_by_id(address_id)
-            return jsonify(new_address), 201
+            return jsonify(dict(new_address)), 201
         return jsonify(error="Failed to add address"), 500
     except Exception as e:
         logger.error(f"Error adding address for user {current_user_id}: {e}", exc_info=True)
@@ -124,7 +124,7 @@ def update_address(address_id):
         )
         if success:
             updated_address = address_manager.get_address_by_id(address_id)
-            return jsonify(updated_address), 200
+            return jsonify(dict(updated_address)), 200
         return jsonify(error="Failed to update address"), 400
     except Exception as e:
         logger.error(f"Error updating address {address_id}: {e}", exc_info=True)
