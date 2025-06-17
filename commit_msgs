@@ -55,3 +55,12 @@ fix: convert Row objects to dict before jsonify in admin endpoints
 - Fixed TypeError caused by attempting to jsonify sqlite3.Row objects
 - Applied conversion to dict in both get_addresses_by_user_as_admin and get_all_addresses_paginated
 - Ensured consistent and valid JSON responses in admin endpoints
+
+-----
+
+feat: add product_images table with API endpoints and documentation updates
+
+- Added new `product_images` table to store multiple images per product
+- Implemented API endpoints for uploading and retrieving product images
+- Updated database schema documentation to include `product_images`
+- Modified product-related API documentation to reference image endpoints

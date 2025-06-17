@@ -131,4 +131,117 @@ class ProductManager(Database):
                 return products, total
         except sqlite3.Error as e:
             logging.error(f"Error retrieving products: {e}")
+            return [], 
+        
+        
+class ProductImageManager(Database):
+    """Manages operations for the product_images table in the database."""
+
+    def add_product_image(self, product_id, image_url):
+        """Adds a new product image."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO product_images (product_id, image_url, created_at)
+                    VALUES (?, ?, ?)
+                ''', (product_id, image_url, self.get_current_timestamp()))
+                conn.commit()
+                image_id = cursor.lastrowid
+                logging.info(f"Product image added for product ID {product_id} with image ID: {image_id}")
+                return image_id
+        except sqlite3.Error as e:
+            logging.error(f"Error adding product image for product ID {product_id}: {e}")
+            return None
+
+    def get_product_image_by_id(self, image_id):
+        """Retrieves a product image by its ID."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM product_images WHERE id = ?', (image_id,))
+                image = cursor.fetchone()
+                logging.info(f"Retrieved product image with ID: {image_id}")
+                return image
+        except sqlite3.Error as e:
+            logging.error(f"Error retrieving product image by ID {image_id}: {e}")
+            return None
+
+    def get_images_by_product(self, product_id):
+        """Retrieves all images for a specific product."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM product_images WHERE product_id = ?', (product_id,))
+                images = cursor.fetchall()
+                logging.info(f"Retrieved {len(images)} images for product ID {product_id}")
+                return images
+        except sqlite3.Error as e:
+            logging.error(f"Error retrieving images for product ID {product_id}: {e}")
+            return []
+
+    def update_product_image(self, image_id, image_url=None):
+        """Updates a product image's URL. Only provided fields are updated."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                updates = []
+                params = []
+
+                if image_url is not None:
+                    updates.append('image_url = ?')
+                    params.append(image_url)
+
+                if not updates:
+                    logging.info(f"No updates provided for image ID: {image_id}")
+                    return True
+
+                params.append(image_id)
+                query = f'UPDATE product_images SET {", ".join(updates)} WHERE id = ?'
+                cursor.execute(query, params)
+                conn.commit()
+                if cursor.rowcount > 0:
+                    logging.info(f"Updated product image with ID: {image_id}")
+                    return True
+                else:
+                    logging.warning(f"No product image found with ID: {image_id}")
+                    return False
+        except sqlite3.Error as e:
+            logging.error(f"Error updating product image {image_id}: {e}")
+            return False
+
+    def delete_product_image(self, image_id):
+        """Deletes a product image by its ID."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM product_images WHERE id = ?', (image_id,))
+                conn.commit()
+                if cursor.rowcount > 0:
+                    logging.info(f"Deleted product image with ID: {image_id}")
+                    return True
+                else:
+                    logging.warning(f"No product image found with ID: {image_id}")
+                    return False
+        except sqlite3.Error as e:
+            logging.error(f"Error deleting product image {image_id}: {e}")
+            return False
+
+    def get_product_images(self, page=1, per_page=20):
+        """Retrieves product images with pagination."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT COUNT(*) as total FROM product_images')
+                total = cursor.fetchone()['total']
+                cursor.execute('''
+                    SELECT * FROM product_images
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                ''', (per_page, (page - 1) * per_page))
+                images = cursor.fetchall()
+                logging.info(f"Retrieved {len(images)} product images. Total: {total}")
+                return images, total
+        except sqlite3.Error as e:
+            logging.error(f"Error retrieving product images: {e}")
             return [], 0

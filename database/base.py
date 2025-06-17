@@ -54,7 +54,6 @@ class Database:
                 cursor.execute("SELECT id FROM users WHERE email = ?", ('admin@gmail.com',))
                 admin_exists = cursor.fetchone()
                 if not admin_exists:
-                    # لم يوجد admin سابق، نضيفه
                     admin_password_hash = self.hash_password('admin')
                     cursor.execute('''
                         INSERT INTO users (username, email, password_hash, is_admin, created_at)
@@ -108,6 +107,19 @@ class Database:
                 ''')
                 cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id)')
                 logging.info("Table 'products' checked/created.")
+                
+                # Create product_images table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS product_images (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        product_id INTEGER NOT NULL,
+                        image_url TEXT NOT NULL,
+                        created_at TEXT DEFAULT (datetime('now')),
+                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                    )
+                ''')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id)')
+                logging.info("Table 'product_images' checked/created.")
 
                 # Create reviews table
                 cursor.execute('''

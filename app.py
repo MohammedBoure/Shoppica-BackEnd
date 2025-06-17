@@ -2,8 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask import Flask, session
 import datetime
-
 from apis import *
+
 
 app = Flask(__name__)
 CORS(app,supports_credentials=True, resources={r"/api/*": {"origins": [

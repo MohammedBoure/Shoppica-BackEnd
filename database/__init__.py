@@ -3,7 +3,7 @@ from .base import Database
 from .user import UserManager
 from .address import AddressManager
 from .category import CategoryManager
-from .product import ProductManager
+from .product import ProductManager,ProductImageManager
 from .review import ReviewManager
 from .cart_item import CartItemManager
 from .order import OrderManager
@@ -20,6 +20,7 @@ __all__ = [
     'AddressManager',
     'CategoryManager',
     'ProductManager',
+    'ProductImageManager',
     'ReviewManager',
     'CartItemManager',
     'OrderManager',
