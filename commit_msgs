@@ -9,10 +9,6 @@ fix(docs): update documentation to reflect latest changes
 
 -----
 
-fix(docs): update documentation to reflect latest changes
-
------
-
 refactor(app): restructure to use session-based architecture and fix authentication docs
 -----
 
@@ -20,8 +16,12 @@ chore(cors): allow https://shoppica-26gr.onrender.com in CORS policy
 
 -----
 
-chore(cors): allow https://shoppica-26gr.onrender.com in CORS policy
+
 
 -----
 
-chore(cors): allow https://shoppica-26gr.onrender.com in CORS policy
+fix(auth): correct admin permission handling in session
+
+Fixed an issue where session['is_admin'] was incorrectly set to false
+despite correct authentication. Now the admin status is stored properly
+upon login and used consistently in route protection.

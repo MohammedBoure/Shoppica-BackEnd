@@ -19,6 +19,7 @@ def admin_required(fn):
     @wraps(fn)
     @session_required
     def wrapper(*args, **kwargs):
+        print("Session:", dict(session))
         if not session.get('is_admin', False):
             return jsonify({'error': 'Admin privileges required'}), 403
         return fn(*args, **kwargs)
@@ -38,7 +39,7 @@ def login():
     if user and user_manager.validate_password(user['id'], password):
         # Store user info in session
         session['user_id'] = user['id']
-        session['is_admin'] = user['is_admin']
+        session['is_admin'] = int(user['is_admin'])
         return jsonify({
             'user': {
                 'id': user['id'],
@@ -53,6 +54,7 @@ def login():
 @auth_bp.route('/me', methods=['GET'])
 @session_required
 def get_current_user():
+    print("Session in /me:", dict(session))
     """Return details of the currently authenticated user."""
     user_id = session['user_id']
     user = user_manager.get_user_by_id(int(user_id))
