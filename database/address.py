@@ -29,11 +29,16 @@ class AddressManager(Database):
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM addresses WHERE id = ?', (address_id,))
                 address = cursor.fetchone()
-                logging.info(f"Retrieved address with ID: {address_id}")
+                if address:
+                    logging.info(f"Retrieved address with ID: {address_id}")
+                else:
+                    logging.warning(f"Address with ID {address_id} not found.")
                 return address
         except sqlite3.Error as e:
             logging.error(f"Error retrieving address by ID {address_id}: {e}")
             return None
+
+
 
     def get_addresses_by_user(self, user_id):
         """Retrieves all addresses for a user."""

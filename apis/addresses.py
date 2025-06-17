@@ -17,12 +17,8 @@ logger = logging.getLogger(__name__)
 # --- Custom Decorator for Session Authorization ---
 
 def check_address_ownership(fn):
-    """
-    Custom decorator (session-based) to ensure the current user owns the address or is an admin.
-    It fetches the address and passes it to the route function via the `g` object.
-    """
     @wraps(fn)
-    @session_required  # Ensures user is logged in first
+    @session_required
     def wrapper(*args, **kwargs):
         address_id = kwargs.get("address_id")
         current_user_id = session['user_id']
@@ -30,14 +26,15 @@ def check_address_ownership(fn):
 
         address = address_manager.get_address_by_id(address_id)
         if not address:
+            logger.warning(f"Address with ID {address_id} not found. User: {current_user_id}, is_admin={is_admin}")
             return jsonify(error="Address not found"), 404
 
-        # Allow access if the address belongs to the user OR if the user is an admin
+        # Check ownership only if address exists
         if address['user_id'] != current_user_id and not is_admin:
+            logger.warning(f"Unauthorized access: user_id={current_user_id}, address.user_id={address['user_id']}, is_admin={is_admin}")
             return jsonify(error="Unauthorized access to this address"), 403
-        
-        # Pass the fetched address to the route function
-        g.address = address
+
+        g.address = dict(address)
         return fn(*args, **kwargs)
     return wrapper
 
@@ -90,11 +87,13 @@ def get_my_addresses():
     current_user_id = session['user_id']
     try:
         addresses = address_manager.get_addresses_by_user(current_user_id)
+        addresses = [dict(row) for row in addresses]
         return jsonify(addresses), 200
     except Exception as e:
         logger.error(f"Error getting addresses for user {current_user_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
 
+#g.address = dict(address)
 
 @addresses_bp.route('/addresses/<int:address_id>', methods=['GET'])
 @check_address_ownership

@@ -37,3 +37,11 @@ fix(addresses): ensure Row objects are converted to dict for JSON serialization
 Fixed a TypeError caused by attempting to jsonify a database Row object.
 Now all Row results are converted to dictionaries before being returned 
 in the API response.
+-----
+
+fix(address): handle missing address and ensure JSON serialization
+
+- Convert address Row object to dict before returning in JSON response
+- Improve logging clarity when address is not found
+- Include user ID and admin status in missing address warnings
+- Ensure 404 response is properly returned if address does not exist
