@@ -2,6 +2,8 @@
 
 This is the backend repository for Shoppica, an e-commerce platform, containing server-side logic, database structure, and API documentation.
 
+## Link BackEnd: 
+ - https://shoppica-backend.onrender.com/api
 ## Project Structure
 
 - **database/**: Database models and SQLite file (`shop.db`).

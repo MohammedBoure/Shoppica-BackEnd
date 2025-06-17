@@ -11,7 +11,7 @@ This document provides detailed information about the Authentication API endpoin
 ---
 
 ## 1. Login
-### Endpoint: `/auth/login`
+### Endpoint: `/login`
 ### Method: `POST`
 ### Description
 Authenticates a user with their email and password, creating a session if successful.
@@ -59,7 +59,7 @@ Authenticates a user with their email and password, creating a session if succes
 ---
 
 ## 2. Get Current User
-### Endpoint: `/auth/me`
+### Endpoint: `/me`
 ### Method: `GET`
 ### Description
 Retrieves the details of the currently authenticated user based on the session.
@@ -100,7 +100,7 @@ Retrieves the details of the currently authenticated user based on the session.
 ---
 
 ## 3. Logout
-### Endpoint: `/auth/logout`
+### Endpoint: `/logout`
 ### Method: `POST`
 ### Description
 Logs out the current user by clearing their session.

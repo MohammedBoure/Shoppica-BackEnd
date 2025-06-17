@@ -1,8 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager
-import logging
-import traceback
+from flask import Flask, session
+import datetime
 
 from apis import *
 
@@ -14,11 +13,16 @@ CORS(app,supports_credentials=True, resources={r"/api/*": {"origins": [
 
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
 
-# Configure JWT
-app.config['JWT_SECRET_KEY'] = 'your-jwt-secret-key-here'
-jwt = JWTManager(app)
+
+# Configure secret key for session management
+app.config['SECRET_KEY'] = 'your-secret-key-here'  # CHANGE THIS TO A SECURE RANDOM STRING!
+app.config['SESSION_COOKIE_SECURE'] = True  # Set to True if using HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=10)
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # Limit uploads to 5MB
 
 
 # Register blueprints
@@ -45,12 +49,10 @@ def handle_options():
 
 @app.errorhandler(Exception)
 def handle_error(error):
-    logging.error(f"Error: {str(error)}\n{traceback.format_exc()}")
     return jsonify({'error': 'Internal server error', 'details': str(error)}), 500
 
 @app.errorhandler(422)
 def handle_unprocessable_entity(error):
-    logging.error(f"422 Error: {str(error)}\n{traceback.format_exc()}")
     return jsonify({'error': 'Unprocessable Entity', 'details': str(error)}), 422
 
 if __name__ == '__main__':

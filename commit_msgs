@@ -10,3 +10,7 @@ fix(docs): update documentation to reflect latest changes
 -----
 
 fix(docs): update documentation to reflect latest changes
+
+-----
+
+refactor(app): restructure to use session-based architecture and fix authentication docs
