@@ -76,3 +76,7 @@ fix: serialize SQLite Row objects in cart item APIs and improve error handling
 - Applied ownership checks using session-based decorator with g.cart_item injection
 - Refactored decorator to reduce DB calls by reusing fetched item
 - Aligned API behavior with updated documentation and consistent response formats
+
+-----
+
+Fix: Replace .get() with dict-style access for sqlite3.Row compatibility in discount usage endpoints

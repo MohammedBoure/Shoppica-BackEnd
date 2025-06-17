@@ -116,11 +116,11 @@ def delete_order(order_id):
 @orders_bp.route('/orders', methods=['GET'])
 @admin_required
 def get_orders():
-    """API to retrieve orders with pagination."""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
     orders, total = order_manager.get_orders(page, per_page)
+
     orders_list = [
         {
             'id': order['id'],
@@ -129,11 +129,12 @@ def get_orders():
             'total_price': order['total_price'],
             'shipping_address_id': order['shipping_address_id'],
             'created_at': order.get('created_at', '')
-        } for order in orders or []
+        } for order in orders
     ]
+
     return jsonify({
         'orders': orders_list,
-        'total': total or 0,
+        'total': total,
         'page': page,
         'per_page': per_page
     }), 200

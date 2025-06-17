@@ -26,27 +26,31 @@ class OrderManager(Database):
         """Retrieves an order by its ID."""
         try:
             with self.get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
                 order = cursor.fetchone()
                 logging.info(f"Retrieved order with ID: {order_id}")
-                return order
+                return dict(order) if order else None
         except sqlite3.Error as e:
             logging.error(f"Error retrieving order by ID {order_id}: {e}")
             return None
+
 
     def get_orders_by_user(self, user_id):
         """Retrieves all orders for a user."""
         try:
             with self.get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM orders WHERE user_id = ?', (user_id,))
                 orders = cursor.fetchall()
                 logging.info(f"Retrieved {len(orders)} orders for user {user_id}")
-                return orders
+                return [dict(order) for order in orders]
         except sqlite3.Error as e:
             logging.error(f"Error retrieving orders for user {user_id}: {e}")
             return []
+
 
     def update_order(self, order_id, status=None, total_price=None, shipping_address_id=None):
         """Updates order details. Only provided fields are updated."""
@@ -105,17 +109,24 @@ class OrderManager(Database):
         """Retrieves orders with pagination."""
         try:
             with self.get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row  
                 cursor = conn.cursor()
+
                 cursor.execute('SELECT COUNT(*) as total FROM orders')
-                total = cursor.fetchone()['total']
+                total_row = cursor.fetchone()
+                total = total_row['total'] if total_row else 0
+
                 cursor.execute('''
                     SELECT * FROM orders
                     ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 ''', (per_page, (page - 1) * per_page))
-                orders = cursor.fetchall()
+                rows = cursor.fetchall()
+
+                orders = [dict(row) for row in rows]
+
                 logging.info(f"Retrieved {len(orders)} orders. Total: {total}")
                 return orders, total
         except sqlite3.Error as e:
-            logging.error(f"Error retrieving orders: {e}")
+            logging.exception(f"Error retrieving orders: {e}")
             return [], 0
