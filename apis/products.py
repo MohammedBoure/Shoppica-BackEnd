@@ -277,6 +277,12 @@ def get_products():
 def add_product_image(product_id):
     """API to add a new product image via file upload."""
     try:
+        # Check if product exists and is active
+        product = product_manager.get_product_by_id(product_id)
+        if not product or product['is_active'] != 1:
+            logger.warning(f"Product not found or inactive: product_id={product_id}")
+            return jsonify({'error': 'Product not found or inactive'}), 404
+
         if 'image' not in request.files:
             logger.warning("Missing required field: image file")
             return jsonify({'error': 'Image file is required'}), 400
@@ -290,7 +296,7 @@ def add_product_image(product_id):
         temp_filename = generate_unique_filename('image', str(uuid.uuid4())[:8], file.filename.rsplit('.', 1)[1].lower())
         temp_path = os.path.join(UPLOAD_FOLDER, temp_filename)
         file.save(temp_path)
-        temp_image_url = f"uploads/products/{temp_filename}"
+        temp_image_url = f"/static/uploads/products/{temp_filename}"
 
         image_id = product_image_manager.add_product_image(product_id, temp_image_url)
         if image_id:
@@ -299,10 +305,11 @@ def add_product_image(product_id):
             new_filename = generate_unique_filename('image', image_id, extension)
             new_path = os.path.join(UPLOAD_FOLDER, new_filename)
             os.rename(temp_path, new_path)
-            image_url = f"uploads/products/{new_filename}"
+            image_url = f"/static/uploads/products/{new_filename}"
             product_image_manager.update_product_image(image_id, image_url)
             logger.info(f"Product image added successfully: image_id={image_id} for product_id={product_id}")
             return jsonify({'message': 'Product image added successfully', 'image_id': image_id}), 201
+        
         logger.error(f"Failed to add product image for product_id={product_id}")
         return jsonify({'error': 'Failed to add product image'}), 500
     except Exception as e:
@@ -353,6 +360,12 @@ def get_images_by_product(product_id):
 def update_product_image(image_id):
     """API to update a product image's URL via file upload."""
     try:
+        # Check if image exists
+        existing_image = product_image_manager.get_product_image_by_id(image_id)
+        if not existing_image:
+            logger.warning(f"Product image not found: image_id={image_id}")
+            return jsonify({'error': 'Product image not found'}), 404
+
         if 'image' not in request.files:
             logger.warning(f"No image file provided for image_id={image_id}")
             return jsonify({'error': 'Image file is required'}), 400
@@ -362,15 +375,26 @@ def update_product_image(image_id):
             logger.warning("Invalid image file extension")
             return jsonify({'error': 'Invalid image file. Allowed extensions: jpg, jpeg, png, gif'}), 400
 
+        # Delete old image file if it exists
+        old_image_url = existing_image['image_url']
+        if old_image_url and os.path.exists(os.path.join('static', old_image_url.lstrip('/static/'))):
+            try:
+                os.remove(os.path.join('static', old_image_url.lstrip('/static/')))
+                logger.info(f"Deleted old image file: {old_image_url}")
+            except Exception as e:
+                logger.warning(f"Failed to delete old image file {old_image_url}: {str(e)}")
+
+        # Save new image
         filename = generate_unique_filename('image', image_id, file.filename.rsplit('.', 1)[1].lower())
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(file_path)
-        image_url = f"uploads/products/{filename}"
+        image_url = f"/static/uploads/products/{filename}"
 
         success = product_image_manager.update_product_image(image_id, image_url)
         if success:
             logger.info(f"Product image updated successfully: image_id={image_id}")
             return jsonify({'message': 'Product image updated successfully'}), 200
+        
         logger.warning(f"Failed to update product image: image_id={image_id}")
         return jsonify({'error': 'Failed to update product image'}), 400
     except Exception as e:

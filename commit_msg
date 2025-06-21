@@ -1,1 +1,1 @@
-docs(changelog): update CHANGELOG with recent fixes, features, and refactors
+fix(api): correct image upload and update endpoints to ensure frontend access to uploaded images
