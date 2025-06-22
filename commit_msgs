@@ -17,3 +17,7 @@ fix(api): correct image upload and update endpoints to ensure frontend access to
 -----
 
 fix(api): correct image upload and update endpoints to ensure frontend access to uploaded images
+
+-----
+
+fix: resolve image saving issue when adding product via /products/<int:product_id>/images
