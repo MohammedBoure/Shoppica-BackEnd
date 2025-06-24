@@ -144,3 +144,101 @@ def get_all_cart_items_paginated():
     except Exception as e:
         logger.error(f"Admin error getting paginated cart items: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
+
+
+@cart_items_bp.route('/cart/clear', methods=['DELETE'])
+@session_required
+def clear_my_cart():
+    """API to clear all items from the currently authenticated user's cart."""
+    current_user_id = session['user_id']
+    try:
+        deleted_count = cart_item_manager.delete_cart_items_by_user(current_user_id)
+        return jsonify(message=f"Cart cleared successfully. {deleted_count} items removed."), 200
+    except Exception as e:
+        logger.error(f"Error clearing cart for user {current_user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@cart_items_bp.route('/cart/stats', methods=['GET'])
+@session_required
+def get_my_cart_stats():
+    """API to retrieve statistics for the currently authenticated user's cart."""
+    current_user_id = session['user_id']
+    try:
+        stats = cart_item_manager.get_user_cart_stats(current_user_id)
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Error getting cart stats for user {current_user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+
+# --- نقاط نهاية جديدة للمسؤول فقط ---
+
+@cart_items_bp.route('/admin/cart_items/search', methods=['GET'])
+@admin_required
+def search_cart_items():
+    """(Admin) API to search for cart items based on user_id or product_id."""
+    user_id = request.args.get('user_id', type=int)
+    product_id = request.args.get('product_id', type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    if not user_id and not product_id:
+        return jsonify(error="At least one search parameter (user_id, product_id) is required"), 400
+
+    try:
+        items, total = cart_item_manager.search_cart_items(
+            user_id=user_id, product_id=product_id, page=page, per_page=per_page
+        )
+        return jsonify({
+            'cart_items': items,
+            'total': total,
+            'page': page,
+            'per_page': per_page
+        }), 200
+    except Exception as e:
+        logger.error(f"Admin error searching cart items: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@cart_items_bp.route('/admin/cart_items/user/<int:user_id>', methods=['DELETE'])
+@admin_required
+def clear_user_cart_as_admin(user_id):
+    """(Admin) API to clear all cart items for a specific user."""
+    try:
+        deleted_count = cart_item_manager.delete_cart_items_by_user(user_id)
+        return jsonify(message=f"Cart for user {user_id} cleared successfully. {deleted_count} items removed."), 200
+    except Exception as e:
+        logger.error(f"Admin error clearing cart for user {user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@cart_items_bp.route('/admin/cart_items/product/<int:product_id>', methods=['DELETE'])
+@admin_required
+def delete_cart_items_by_product(product_id):
+    """(Admin) API to delete all cart items for a specific product."""
+    try:
+        deleted_count = cart_item_manager.delete_cart_items_by_product(product_id)
+        return jsonify(message=f"All cart items for product {product_id} deleted successfully. {deleted_count} items removed."), 200
+    except Exception as e:
+        logger.error(f"Admin error deleting cart items for product {product_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@cart_items_bp.route('/admin/cart/stats', methods=['GET'])
+@admin_required
+def get_overall_cart_stats():
+    """(Admin) API to get overall statistics for all cart items."""
+    try:
+        stats = cart_item_manager.get_cart_stats()
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Admin error getting overall cart stats: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@cart_items_bp.route('/admin/cart_items/user/<int:user_id>/stats', methods=['GET'])
+@admin_required
+def get_user_cart_stats_as_admin(user_id):
+    """(Admin) API to retrieve statistics for a specific user's cart."""
+    try:
+        stats = cart_item_manager.get_user_cart_stats(user_id)
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Admin error getting cart stats for user {user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500

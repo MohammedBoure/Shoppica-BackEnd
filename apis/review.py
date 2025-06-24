@@ -137,3 +137,78 @@ def get_reviews():
         'page': page,
         'per_page': per_page
     }), 200
+    
+@reviews_bp.route('/reviews/search', methods=['GET'])
+def search_reviews():
+    """
+    API to search for reviews based on various criteria with pagination.
+    This endpoint is public to allow users to filter reviews.
+    """
+    # استخراج معاملات البحث من عنوان URL
+    product_id = request.args.get('product_id', type=int)
+    user_id = request.args.get('user_id', type=int)
+    min_rating = request.args.get('min_rating', type=int)
+    max_rating = request.args.get('max_rating', type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    # التحقق من وجود معامل بحث واحد على الأقل
+    if not any([product_id, user_id, min_rating, max_rating]):
+        return jsonify({'error': 'At least one search parameter (product_id, user_id, min_rating, max_rating) is required'}), 400
+
+    reviews, total = review_manager.search_reviews(
+        product_id=product_id,
+        user_id=user_id,
+        min_rating=min_rating,
+        max_rating=max_rating,
+        page=page,
+        per_page=per_page
+    )
+
+    return jsonify({
+        'reviews': reviews,
+        'total': total,
+        'page': page,
+        'per_page': per_page
+    }), 200
+
+@reviews_bp.route('/reviews/by-product/<int:product_id>', methods=['DELETE'])
+@admin_required
+def delete_reviews_by_product(product_id):
+    """API for admins to delete all reviews for a specific product."""
+    deleted_count = review_manager.delete_reviews_by_product(product_id)
+    if deleted_count > 0:
+        return jsonify({
+            'message': f'Successfully deleted {deleted_count} reviews for product ID {product_id}.'
+        }), 200
+    return jsonify({
+        'message': f'No reviews found for product ID {product_id}.'
+    }), 200
+
+@reviews_bp.route('/reviews/by-user/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_reviews_by_user(user_id):
+    """API for admins to delete all reviews by a specific user."""
+    deleted_count = review_manager.delete_reviews_by_user(user_id)
+    if deleted_count > 0:
+        return jsonify({
+            'message': f'Successfully deleted {deleted_count} reviews by user ID {user_id}.'
+        }), 200
+    return jsonify({
+        'message': f'No reviews found for user ID {user_id}.'
+    }), 200
+
+@reviews_bp.route('/reviews/stats/product/<int:product_id>', methods=['GET'])
+def get_product_review_stats(product_id):
+    """API to get review statistics for a specific product. This is public."""
+    stats = review_manager.get_product_review_stats(product_id)
+    if stats['total_reviews'] > 0:
+        return jsonify(stats), 200
+    return jsonify({'message': 'No review statistics found for this product', 'stats': stats}), 404
+
+@reviews_bp.route('/reviews/stats/overall', methods=['GET'])
+@admin_required
+def get_overall_review_stats():
+    """API for admins to get overall review statistics for all products."""
+    stats = review_manager.get_overall_review_stats()
+    return jsonify(stats), 200
