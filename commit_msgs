@@ -6,15 +6,13 @@ docs(changelog): update CHANGELOG with recent fixes, features, and refactors
 
 fix(api): correct image upload and update endpoints to ensure frontend access to uploaded images
 
+
+
 -----
 
-refactor(database): migrate from sqlite3 to SQLAlchemy
+fix: resolve image saving issue when adding product via /products/<int:product_id>/images
 
-Replaced all sqlite3 logic in database/base.py with SQLAlchemy.
-- Set up SQLAlchemy engine and session
-- Used declarative base for model definitions
-- Updated all DB operations to use SQLAlchemy ORM
-This improves maintainability and scalability.
+
 
 -----
 

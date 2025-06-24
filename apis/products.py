@@ -71,7 +71,7 @@ def add_product():
                 filename = generate_unique_filename('product', temp_id, file.filename.rsplit('.', 1)[1].lower())
                 file_path = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(file_path)
-                image_url = f"uploads/products/{filename}"
+                image_url = f"static/uploads/products/{filename}"
                 logger.info(f"Image uploaded: {image_url}")
             else:
                 logger.warning("Invalid or missing image file")
@@ -85,7 +85,7 @@ def add_product():
                 new_filename = generate_unique_filename('product', product_id, filename.rsplit('.', 1)[1])
                 new_path = os.path.join(UPLOAD_FOLDER, new_filename)
                 os.rename(old_path, new_path)
-                image_url = f"uploads/products/{new_filename}"
+                image_url = f"static/uploads/products/{new_filename}"
                 product_manager.update_product(product_id, image_url=image_url)
                 logger.info(f"Image filename updated for product_id={product_id}: {image_url}")
 
@@ -202,7 +202,7 @@ def update_product(product_id):
                 filename = generate_unique_filename('product', product_id, file.filename.rsplit('.', 1)[1].lower())
                 file_path = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(file_path)
-                image_url = f"uploads/products/{filename}"
+                image_url = f"static/uploads/products/{filename}"
                 logger.info(f"Image uploaded for update: {image_url}")
             else:
                 logger.warning("Invalid or missing image file")
