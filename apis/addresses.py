@@ -176,3 +176,95 @@ def get_all_addresses_paginated():
     except Exception as e:
         logger.error(f"Admin error getting paginated addresses: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
+    
+
+@addresses_bp.route('/addresses/me/default', methods=['GET'])
+@session_required
+def get_my_default_address():
+    """API to retrieve the default address for the currently authenticated user."""
+    current_user_id = session['user_id']
+    try:
+        address = address_manager.get_default_address(current_user_id)
+        if address:
+            return jsonify(address), 200
+        else:
+            return jsonify(error="No default address found"), 404
+    except Exception as e:
+        logger.error(f"Error getting default address for user {current_user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@addresses_bp.route('/addresses/me/stats', methods=['GET'])
+@session_required
+def get_my_address_stats():
+    """API to retrieve address statistics for the currently authenticated user."""
+    current_user_id = session['user_id']
+    try:
+        stats = address_manager.get_user_address_stats(current_user_id)
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Error getting address stats for user {current_user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+
+# --- نقاط نهاية جديدة للمسؤول فقط ---
+
+@addresses_bp.route('/admin/addresses/search', methods=['GET'])
+@admin_required
+def search_addresses():
+    """(Admin) API to search for addresses based on various criteria with pagination."""
+    try:
+        user_id = request.args.get('user_id', type=int)
+        city = request.args.get('city', type=str)
+        country = request.args.get('country', type=str)
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+
+        if not any([user_id, city, country]):
+            return jsonify(error="At least one search parameter (user_id, city, country) is required"), 400
+
+        addresses, total = address_manager.search_addresses(
+            user_id=user_id, city=city, country=country, page=page, per_page=per_page
+        )
+        
+        return jsonify({
+            'addresses': addresses,
+            'total': total,
+            'page': page,
+            'per_page': per_page
+        }), 200
+    except Exception as e:
+        logger.error(f"Admin error searching addresses: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@addresses_bp.route('/admin/addresses/user/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_addresses_by_user_as_admin(user_id):
+    """(Admin) API to delete all addresses for a specific user."""
+    try:
+        deleted_count = address_manager.delete_addresses_by_user(user_id)
+        return jsonify(message=f"Successfully deleted {deleted_count} addresses for user ID {user_id}."), 200
+    except Exception as e:
+        logger.error(f"Admin error deleting addresses for user {user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@addresses_bp.route('/admin/addresses/stats', methods=['GET'])
+@admin_required
+def get_overall_address_stats():
+    """(Admin) API to get overall statistics for all addresses."""
+    try:
+        stats = address_manager.get_address_stats()
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Admin error getting overall address stats: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500
+
+@addresses_bp.route('/admin/addresses/user/<int:user_id>/stats', methods=['GET'])
+@admin_required
+def get_user_address_stats_as_admin(user_id):
+    """(Admin) API to retrieve address statistics for a specific user."""
+    try:
+        stats = address_manager.get_user_address_stats(user_id)
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Admin error getting address stats for user {user_id}: {e}", exc_info=True)
+        return jsonify(error="An internal server error occurred"), 500

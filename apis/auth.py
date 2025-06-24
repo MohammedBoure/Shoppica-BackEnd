@@ -25,7 +25,7 @@ def admin_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
-@auth_bp.route('/login', methods=['POST'])
+@auth_bp.route('/auth/login', methods=['POST'])
 def login():
     """Authenticate user and store session."""
     data = request.get_json()
@@ -51,7 +51,7 @@ def login():
 
     return jsonify({'error': 'Invalid credentials'}), 401
 
-@auth_bp.route('/me', methods=['GET'])
+@auth_bp.route('/auth/me', methods=['GET'])
 @session_required
 def get_current_user():
     print("Session in /me:", dict(session))
@@ -70,7 +70,7 @@ def get_current_user():
         }), 200
     return jsonify({'error': 'User not found'}), 404
 
-@auth_bp.route('/logout', methods=['POST'])
+@auth_bp.route('/auth/logout', methods=['POST'])
 @session_required
 def logout():
     """Log out the current user by clearing the session."""

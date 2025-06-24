@@ -163,3 +163,39 @@ class UserManager(Database):
                 conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Error clearing users: {e}")
+
+    def clear_all_users(self):
+        """Clears all users from the database."""
+        try:
+            with self.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM users")
+                conn.commit()
+                logging.info("All users cleared from database.")
+        except sqlite3.Error as e:
+            logging.error(f"Error clearing users: {e}")
+
+    def search_users(self, query, page=1, per_page=20):
+        """Searches users by username or email (partial match)."""
+        try:
+            with self.get_db_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                search_term = f'%{query}%'
+                cursor.execute('''
+                    SELECT COUNT(*) as total FROM users
+                    WHERE username LIKE ? OR email LIKE ?
+                ''', (search_term, search_term))
+                total = cursor.fetchone()['total']
+                cursor.execute('''
+                    SELECT * FROM users
+                    WHERE username LIKE ? OR email LIKE ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                ''', (search_term, search_term, per_page, (page - 1) * per_page))
+                users = [dict(user) for user in cursor.fetchall()]
+                logging.info(f"Found {len(users)} users matching query: {query}")
+                return users, total
+        except sqlite3.Error as e:
+            logging.error(f"Error searching users with query {query}: {e}")
+            return [], 0

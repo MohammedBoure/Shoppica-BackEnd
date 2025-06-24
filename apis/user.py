@@ -181,3 +181,38 @@ def validate_password(user_id):
     if is_valid:
         return jsonify({'message': 'Password is valid'}), 200
     return jsonify({'error': 'Invalid password'}), 401
+
+@users_bp.route('/users/search', methods=['GET'])
+@admin_required
+def search_users():
+    """API to search for users by username or email with pagination."""
+    query = request.args.get('q') # استخدام 'q' كمعامل قياسي للبحث
+    if not query:
+        return jsonify({'error': 'Search query parameter "q" is required'}), 400
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    
+    users, total = user_manager.search_users(query, page, per_page)
+    
+    return jsonify({
+        'users': users, # UserManager.search_users بالفعل يرجع dicts
+        'total': total,
+        'page': page,
+        'per_page': per_page
+    }), 200
+
+
+@users_bp.route('/users/clear-all', methods=['DELETE'])
+@admin_required
+def clear_all_users():
+    """
+    API to delete all users from the database.
+    This is a destructive operation and should be used with caution.
+    """
+    try:
+        user_manager.clear_all_users()
+        return jsonify({'message': 'All users have been successfully deleted.'}), 200
+    except Exception as e:
+        logging.error(f"API Error clearing all users: {e}")
+        return jsonify({'error': 'An internal error occurred while clearing users.'}), 500

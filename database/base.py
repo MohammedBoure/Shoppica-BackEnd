@@ -1,279 +1,333 @@
-import sqlite3
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from passlib.hash import scrypt
-
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Index, text
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.event import listens_for
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.engine import Engine
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class Database:
-    """Base class for managing SQLite database connections and schema initialization."""
-    
-    DB_FILE = 'database/shop.db'
+# SQLAlchemy Base
+Base = declarative_base()
 
+# Database URL for SQLite
+DATABASE_URL = "sqlite:///shop.db"
+
+class User(Base):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, nullable=False, unique=True)
+    email = Column(String, nullable=False, unique=True)
+    password_hash = Column(String, nullable=False)
+    full_name = Column(String)
+    phone_number = Column(String)
+    is_admin = Column(Integer, default=0, nullable=False)  # SQLite does not enforce CheckConstraint
+    created_at = Column(DateTime, default=datetime.utcnow)  # Removed timezone=True for SQLite compatibility
+    
+    # Relationships
+    addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
+    cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
+    discount_usages = relationship("DiscountUsage", back_populates="user", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_users_username', 'username'),
+        Index('idx_users_email', 'email'),
+    )
+
+class Address(Base):
+    __tablename__ = 'addresses'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # SQLite does not enforce ON DELETE
+    address_line = Column(String)
+    city = Column(String)
+    state = Column(String)
+    postal_code = Column(String)
+    is_default = Column(Integer, default=0, nullable=False)
+    
+    # Relationship
+    user = relationship("User", back_populates="addresses")
+    
+    __table_args__ = (
+        Index('idx_addresses_user_id', 'user_id'),
+    )
+
+class Category(Base):
+    __tablename__ = 'categories'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    parent_id = Column(Integer, ForeignKey('categories.id'))
+    image_url = Column(String, nullable=False)
+    
+    # Relationships
+    parent = relationship("Category", remote_side=[id])
+    products = relationship("Product", back_populates="category")
+    discounts = relationship("CategoryDiscount", back_populates="category", cascade="all, delete-orphan")
+
+class Product(Base):
+    __tablename__ = 'products'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    price = Column(Float, nullable=False)
+    stock_quantity = Column(Integer, nullable=False)
+    low_stock_threshold = Column(Integer, default=5, nullable=False)
+    category_id = Column(Integer, ForeignKey('categories.id'))
+    image_url = Column(String)
+    is_active = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    category = relationship("Category", back_populates="products")
+    images = relationship("ProductImage", back_populates="product", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="product", cascade="all, delete-orphan")
+    cart_items = relationship("CartItem", back_populates="product", cascade="all, delete-orphan")
+    order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
+    discounts = relationship("ProductDiscount", back_populates="product", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index('idx_products_category_id', 'category_id'),
+    )
+
+class ProductImage(Base):
+    __tablename__ = 'product_images'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    image_url = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    product = relationship("Product", back_populates="images")
+    
+    __table_args__ = (
+        Index('idx_product_images_product_id', 'product_id'),
+    )
+
+class Review(Base):
+    __tablename__ = 'reviews'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    rating = Column(Integer, nullable=False)
+    comment = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="reviews")
+    product = relationship("Product", back_populates="reviews")
+    
+    __table_args__ = (
+        Index('idx_reviews_product_id', 'product_id'),
+        Index('idx_reviews_user_id', 'user_id'),
+    )
+
+class CartItem(Base):
+    __tablename__ = 'cart_items'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    added_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="cart_items")
+    product = relationship("Product", back_populates="cart_items")
+    
+    __table_args__ = (
+        Index('idx_cart_items_user_id', 'user_id'),
+        Index('idx_cart_items_product_id', 'product_id'),
+    )
+
+class Order(Base):
+    __tablename__ = 'orders'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    status = Column(String, default='pending', nullable=False)
+    total_price = Column(Float)
+    shipping_address_id = Column(Integer, ForeignKey('addresses.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="orders")
+    shipping_address = relationship("Address")
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="order", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index('idx_orders_user_id', 'user_id'),
+    )
+
+class OrderItem(Base):
+    __tablename__ = 'order_items'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey('orders.id'), nullable=False)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    price = Column(Float, nullable=False)
+    
+    # Relationships
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product", back_populates="order_items")
+    
+    __table_args__ = (
+        Index('idx_order_items_order_id', 'order_id'),
+    )
+
+class Payment(Base):
+    __tablename__ = 'payments'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey('orders.id'), nullable=False)
+    payment_method = Column(String)
+    payment_status = Column(String, default='unpaid', nullable=False)
+    transaction_id = Column(String)
+    paid_at = Column(DateTime)
+    
+    # Relationship
+    order = relationship("Order", back_populates="payments")
+    
+    __table_args__ = (
+        Index('idx_payments_order_id', 'order_id'),
+    )
+
+class Discount(Base):
+    __tablename__ = 'discounts'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, nullable=False, unique=True)
+    description = Column(String)
+    discount_percent = Column(Float)
+    max_uses = Column(Integer)
+    expires_at = Column(DateTime)
+    is_active = Column(Integer, default=1, nullable=False)
+    
+    # Relationship
+    usages = relationship("DiscountUsage", back_populates="discount", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index('idx_discounts_code', 'code'),
+    )
+
+class DiscountUsage(Base):
+    __tablename__ = 'discount_usage'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discount_id = Column(Integer, ForeignKey('discounts.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    used_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    discount = relationship("Discount", back_populates="usages")
+    user = relationship("User", back_populates="discount_usages")
+    
+    __table_args__ = (
+        Index('idx_discount_usage_discount_id', 'discount_id'),
+    )
+
+class ProductDiscount(Base):
+    __tablename__ = 'product_discounts'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    discount_percent = Column(Float, nullable=False)
+    starts_at = Column(DateTime)
+    ends_at = Column(DateTime)
+    is_active = Column(Integer, default=1, nullable=False)
+    
+    # Relationship
+    product = relationship("Product", back_populates="discounts")
+    
+    __table_args__ = (
+        Index('idx_product_discounts_product_id', 'product_id'),
+    )
+
+class CategoryDiscount(Base):
+    __tablename__ = 'category_discounts'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=False)
+    discount_percent = Column(Float, nullable=False)
+    starts_at = Column(DateTime)
+    ends_at = Column(DateTime)
+    is_active = Column(Integer, default=1, nullable=False)
+    
+    # Relationship
+    category = relationship("Category", back_populates="discounts")
+    
+    __table_args__ = (
+        Index('idx_category_discounts_category_id', 'category_id'),
+    )
+
+class Database:
+    """Base class for managing SQLAlchemy database connections and schema initialization."""
+    
     def __init__(self):
         """Initialize the database and create schema."""
+        self.engine = create_engine(
+            DATABASE_URL,
+            connect_args={"check_same_thread": False},  # Required for SQLite in multi-threaded apps
+            poolclass=StaticPool  # Optional: Use StaticPool for simplicity in single-threaded apps
+        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         self.init_db()
 
-    def get_db_connection(self):
-        """Establishes a new SQLite connection with row factory and foreign key support."""
+    def get_db_session(self):
+        """Returns a new SQLAlchemy session."""
+        session = self.SessionLocal()
         try:
-            conn = sqlite3.connect(self.DB_FILE, timeout=10)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            return conn
-        except sqlite3.Error as e:
-            logging.error(f"Database connection error: {e}")
-            raise
+            yield session
+        finally:
+            session.close()
 
     def init_db(self):
         """Initializes the database schema with tables and indexes."""
         try:
-            with self.get_db_connection() as conn:
-                cursor = conn.cursor()
-                logging.info("Initializing database schema...")
-
-                # Create users table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS users (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        username TEXT NOT NULL UNIQUE,
-                        email TEXT NOT NULL UNIQUE,
-                        password_hash TEXT NOT NULL,
-                        full_name TEXT,
-                        phone_number TEXT,
-                        is_admin INTEGER DEFAULT 0 CHECK(is_admin IN (0, 1)),
-                        created_at TEXT DEFAULT (datetime('now'))
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
-                logging.info("Table 'users' checked/created.")
-                
-                cursor.execute("SELECT id FROM users WHERE email = ?", ('admin@gmail.com',))
-                admin_exists = cursor.fetchone()
-                if not admin_exists:
+            logging.info("Initializing database schema...")
+            Base.metadata.create_all(bind=self.engine)
+            
+            # Enable foreign key support in SQLite
+            with self.engine.connect() as connection:
+                connection.execute(text("PRAGMA foreign_keys = ON;"))
+            
+            # Check and create default admin user
+            with next(self.get_db_session()) as session:
+                admin = session.query(User).filter_by(email='admin@gmail.com').first()
+                if not admin:
                     admin_password_hash = self.hash_password('admin')
-                    cursor.execute('''
-                        INSERT INTO users (username, email, password_hash, is_admin, created_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', ('admin', 'admin@gmail.com', admin_password_hash, 1, self.get_current_timestamp()))
+                    admin_user = User(
+                        username='admin',
+                        email='admin@gmail.com',
+                        password_hash=admin_password_hash,
+                        is_admin=1,
+                        created_at=self.get_current_timestamp()
+                    )
+                    session.add(admin_user)
+                    session.commit()
                     logging.info("Default admin user created.")
-                    
-                # Create addresses table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS addresses (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL,
-                        address_line1 TEXT,
-                        address_line2 TEXT,
-                        city TEXT,
-                        state TEXT,
-                        postal_code TEXT,
-                        country TEXT,
-                        is_default INTEGER DEFAULT 0 CHECK(is_default IN (0, 1)),
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_addresses_user_id ON addresses(user_id)')
-                logging.info("Table 'addresses' checked/created.")
-
-                # Create categories table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS categories (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        parent_id INTEGER,
-                        FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
-                    )
-                ''')
-                logging.info("Table 'categories' checked/created.")
-
-                # Create products table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS products (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        description TEXT,
-                        price REAL NOT NULL,
-                        stock_quantity INTEGER NOT NULL,
-                        category_id INTEGER,
-                        image_url TEXT,
-                        is_active INTEGER DEFAULT 1 CHECK(is_active IN (0, 1)),
-                        created_at TEXT DEFAULT (datetime('now')),
-                        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id)')
-                logging.info("Table 'products' checked/created.")
-                
-                # Create product_images table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS product_images (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        product_id INTEGER NOT NULL,
-                        image_url TEXT NOT NULL,
-                        created_at TEXT DEFAULT (datetime('now')),
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id)')
-                logging.info("Table 'product_images' checked/created.")
-
-                # Create reviews table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS reviews (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        rating INTEGER CHECK (rating BETWEEN 1 AND 5),
-                        comment TEXT,
-                        created_at TEXT DEFAULT (datetime('now')),
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_reviews_product_id ON reviews(product_id)')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)')
-                logging.info("Table 'reviews' checked/created.")
-
-                # Create cart_items table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS cart_items (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity INTEGER NOT NULL,
-                        added_at TEXT DEFAULT (datetime('now')),
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id)')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_cart_items_product_id ON cart_items(product_id)')
-                logging.info("Table 'cart_items' checked/created.")
-
-                # Create orders table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS orders (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL,
-                        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'shipped', 'delivered', 'canceled')),
-                        total_price REAL,
-                        shipping_address_id INTEGER,
-                        created_at TEXT DEFAULT (datetime('now')),
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                        FOREIGN KEY (shipping_address_id) REFERENCES addresses(id) ON DELETE SET NULL
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)')
-                logging.info("Table 'orders' checked/created.")
-
-                # Create order_items table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS order_items (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        order_id INTEGER NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity INTEGER NOT NULL,
-                        price REAL NOT NULL,
-                        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)')
-                logging.info("Table 'order_items' checked/created.")
-
-                # Create payments table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS payments (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        order_id INTEGER NOT NULL,
-                        payment_method TEXT,
-                        payment_status TEXT DEFAULT 'unpaid' CHECK(payment_status IN ('paid', 'unpaid', 'failed')),
-                        transaction_id TEXT,
-                        paid_at TEXT,
-                        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)')
-                logging.info("Table 'payments' checked/created.")
-
-                # Create discounts table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS discounts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        code TEXT NOT NULL UNIQUE,
-                        description TEXT,
-                        discount_percent REAL,
-                        max_uses INTEGER,
-                        expires_at TEXT,
-                        is_active INTEGER DEFAULT 1 CHECK(is_active IN (0, 1))
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_discounts_code ON discounts(code)')
-                logging.info("Table 'discounts' checked/created.")
-
-                # Create discount_usage table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS discount_usage (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        discount_id INTEGER NOT NULL,
-                        user_id INTEGER NOT NULL,
-                        used_at TEXT DEFAULT (datetime('now')),
-                        FOREIGN KEY (discount_id) REFERENCES discounts(id) ON DELETE CASCADE,
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_discount_usage_discount_id ON discount_usage(discount_id)')
-                logging.info("Table 'discount_usage' checked/created.")
-
-                # Create product_discounts table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS product_discounts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        product_id INTEGER NOT NULL,
-                        discount_percent REAL NOT NULL,
-                        starts_at TEXT,
-                        ends_at TEXT,
-                        is_active INTEGER DEFAULT 1 CHECK(is_active IN (0, 1)),
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_product_discounts_product_id ON product_discounts(product_id)')
-                logging.info("Table 'product_discounts' checked/created.")
-
-                # Create category_discounts table
-                cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS category_discounts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        category_id INTEGER NOT NULL,
-                        discount_percent REAL NOT NULL,
-                        starts_at TEXT,
-                        ends_at TEXT,
-                        is_active INTEGER DEFAULT 1 CHECK(is_active IN (0, 1)),
-                        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-                    )
-                ''')
-                cursor.execute('CREATE INDEX IF NOT EXISTS idx_category_discounts_category_id ON category_discounts(category_id)')
-                logging.info("Table 'category_discounts' checked/created.")
-
-                conn.commit()
-                logging.info("Database schema initialization complete.")
-        except sqlite3.Error as e:
+            
+            logging.info("Database schema initialization complete.")
+        except SQLAlchemyError as e:
             logging.error(f"Database initialization failed: {e}")
             raise
 
     @staticmethod
     def hash_password(password):
-        """Hashes a password using werkzeug.security."""
+        """Hashes a password using passlib's scrypt."""
         return scrypt.hash(password)
+
     @staticmethod
     def check_password(pwhash, password):
+        """Verifies a password against its hash."""
         return scrypt.verify(password, pwhash)
 
     @staticmethod
     def get_current_timestamp():
-        """Returns the current UTC timestamp in ISO8601 format (timezone-aware)."""
-        return datetime.now(timezone.utc).isoformat()
+        """Returns the current UTC timestamp."""
+        return datetime.utcnow()
+
+# Enable foreign key support for all connections
+@listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.close()
