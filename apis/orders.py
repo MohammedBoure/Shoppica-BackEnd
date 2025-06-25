@@ -211,3 +211,35 @@ def get_top_selling_products():
         'top_products': products,
         'message': 'No products found for the given criteria' if not products else ''
     }), 200
+    
+@orders_bp.route('/orders/number', methods=['GET'])
+@admin_required
+def get_sales_count():
+    """
+    Get the total number of orders or filtered by status.
+    Query param (optional):
+        - status: can be a single status or multiple statuses (comma-separated).
+    Example:
+        /orders/sales-count             => All orders
+        /orders/sales-count?status=completed
+        /orders/sales-count?status=completed,shipped
+    """
+    try:
+        # Get 'status' from query parameters
+        status_param = request.args.get('status')
+        if status_param:
+            # Split comma-separated values into a list
+            status_filter = [s.strip() for s in status_param.split(',')]
+            # Use single string if only one status
+            if len(status_filter) == 1:
+                status_filter = status_filter[0]
+        else:
+            status_filter = None
+
+        # Get the sales count from OrderManager
+        count = order_manager.get_sales_count(status_filter)
+        return jsonify({'success': True, 'sales_count': count}), 200
+
+    except Exception as e:
+        logging.error(f"Error in /orders/sales-count: {e}")
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500

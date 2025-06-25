@@ -1,1 +1,7 @@
-refactor(db): migrate to SQLAlchemy and add new search helpers, update all APIs
+git commit -m "feat(api): add endpoints for dashboard stats and low stock alerts
+
+- Added /products/low_stock to track critical stock levels
+- Added /orders/number to get total orders and sales
+- Added /users/number to get total users
+- Added /products/number to get total products
+- Implemented corresponding database functions"

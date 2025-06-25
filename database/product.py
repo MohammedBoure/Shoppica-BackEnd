@@ -1,5 +1,6 @@
 from .base import Database, Product, ProductImage
 from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
 import logging
 import os
 import uuid
@@ -165,6 +166,32 @@ class ProductManager(Database):
         except Exception as e:
             logging.error(f"Error searching products with term '{search_term}': {e}")
             return [], 0
+    
+    def get_total_products(self):
+        """Returns the total number of products in the database."""
+        try:
+            with next(self.get_db_session()) as session:
+                total_products = session.query(Product).count()
+                logging.info(f"Retrieved total products count: {total_products}")
+                return total_products
+        except SQLAlchemyError as e:
+            logging.error(f"Failed to retrieve total products count: {e}")
+            raise
+    def get_low_stock_products(self):
+        """Retrieves products that are at or below their low stock threshold."""
+        try:
+            with next(self.get_db_session()) as session:
+                query = select(Product).where(
+                    Product.stock_quantity <= Product.low_stock_threshold,
+                    Product.is_active == True
+                )
+                products = session.execute(query).scalars().all()
+                logging.info(f"Retrieved {len(products)} low stock products.")
+                return products
+        except Exception as e:
+            logging.error(f"Error retrieving low stock products: {e}")
+            return []
+
 
     def _allowed_file(self, filename):
         """Check if the file has an allowed extension."""
@@ -330,3 +357,5 @@ class ProductImageManager(Database):
         file.save(file_path)
         # Return the relative URL
         return f"/static/uploads/products/{filename}"
+    
+    

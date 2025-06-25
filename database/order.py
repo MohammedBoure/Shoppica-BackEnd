@@ -238,3 +238,27 @@ class OrderManager(Database):
         except SQLAlchemyError as e:
             logging.error(f"Error retrieving top selling products: {e}")
             return []
+
+    def get_sales_count(self, status_filter=None):
+        """
+        Returns the number of orders based on status.
+        - If status_filter is None, returns the total number of orders.
+        - If status_filter is a string or list, filters by that status or statuses.
+        """
+        try:
+            with next(self.get_db_session()) as session:
+                query = session.query(func.count(Order.id))
+
+                # Apply status filter if provided
+                if status_filter:
+                    if isinstance(status_filter, str):
+                        query = query.filter(Order.status == status_filter)
+                    elif isinstance(status_filter, list):
+                        query = query.filter(Order.status.in_(status_filter))
+
+                count = query.scalar()
+                logging.info(f"Total sales count with filter {status_filter}: {count}")
+                return count
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting sales count with filter {status_filter}: {e}")
+            return 0

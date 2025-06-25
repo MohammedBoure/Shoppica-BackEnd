@@ -258,3 +258,24 @@ def clear_all_users():
     except SQLAlchemyError as e:
         logging.error(f"Database error clearing all users: {e}")
         return jsonify({'error': 'Failed to clear users due to database error'}), 500
+
+@users_bp.route('/users/number', methods=['GET'])
+@admin_required  # Only allow access to admins
+def get_total_users():
+    """
+    API endpoint to return the total number of users in the database.
+    Accessible only by admin users.
+    """
+    try:
+        # Call UserManager method to get total user count
+        total_users = user_manager.get_total_user_count()
+        
+        # Return the count as a JSON response
+        return jsonify({'total_users': total_users}), 200
+
+    except SQLAlchemyError as e:
+        # Log any database errors
+        logging.error(f"Error fetching total users: {e}")
+        
+        # Return server error message
+        return jsonify({'error': 'Failed to retrieve user count'}), 500

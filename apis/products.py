@@ -392,6 +392,53 @@ def search_products():
         logger.error(f"Error searching products with term '{search_term}': {str(e)}")
         return jsonify({'error': 'Internal server error', 'error_code': 'INTERNAL_ERROR'}), 500
 
+@products_bp.route('/products/number', methods=['GET'])
+def get_total_products():
+    """API to retrieve the total number of products in the database."""
+    try:
+        total_products = product_manager.get_total_products()
+        logger.info(f"Retrieved total products count: {total_products}")
+        return jsonify({
+            'total_products': total_products,
+            'message': 'Total products count retrieved successfully'
+        }), 200
+    except SQLAlchemyError as e:
+        logger.error(f"Database error retrieving total products count: {str(e)}")
+        return jsonify({'error': 'Database error', 'error_code': 'DATABASE_ERROR'}), 500
+    except Exception as e:
+        logger.error(f"Error retrieving total products count: {str(e)}")
+        return jsonify({'error': 'Internal server error', 'error_code': 'INTERNAL_ERROR'}), 500
+    
+@products_bp.route('/products/low_stock', methods=['GET'])
+@admin_required  
+def get_low_stock_products():
+    """API endpoint to get low stock products."""
+    try:
+        products = product_manager.get_low_stock_products()
+        product_list = [
+            {
+                "id": product.id,
+                "name": product.name,
+                "stock_quantity": product.stock_quantity,
+                "low_stock_threshold": product.low_stock_threshold,
+                "category_id": product.category_id,
+                "price": product.price,
+                "image_url": product.image_url
+            }
+            for product in products
+        ]
+        return jsonify({
+            "status": "success",
+            "message": f"{len(product_list)} low stock products found.",
+            "data": product_list
+        }), 200
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching low stock products: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Failed to retrieve low stock products."
+        }), 500
+    
 @products_bp.route('/products/<int:product_id>/images', methods=['POST'])
 @admin_required
 def add_product_image(product_id):

@@ -225,3 +225,13 @@ class UserManager(Database):
         except SQLAlchemyError as e:
             logging.error(f"Error searching users with query {query}: {e}")
             return [], 0
+    def get_total_user_count(self):
+        """Returns the total number of users in the database."""
+        try:
+            with next(self.get_db_session()) as session:
+                total = session.query(func.count(User.id)).scalar()
+                logging.info(f"Total user count retrieved: {total}")
+                return total
+        except SQLAlchemyError as e:
+            logging.error(f"Error getting total user count: {e}")
+            return 0
