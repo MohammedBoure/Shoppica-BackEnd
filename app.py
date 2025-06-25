@@ -42,6 +42,7 @@ app.register_blueprint(discounts_bp, url_prefix='/api')
 app.register_blueprint(discount_usages_bp, url_prefix='/api')
 app.register_blueprint(product_discounts_bp, url_prefix='/api')
 app.register_blueprint(category_discounts_bp, url_prefix='/api')
+app.register_blueprint(analytics_bp, url_prefix='/api')
 
 
 @app.before_request

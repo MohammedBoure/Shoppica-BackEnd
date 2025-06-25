@@ -12,6 +12,7 @@ from .discounts import discounts_bp
 from .discount_usage import discount_usages_bp
 from .product_discounts import product_discounts_bp
 from .category_discounts import category_discounts_bp
+from .analytics import analytics_bp
 
 __all__ = [
     'auth_bp',
@@ -27,5 +28,6 @@ __all__ = [
     'discounts_bp',
     'discount_usages_bp',
     'product_discounts_bp',
-    'category_discounts_bp'
+    'category_discounts_bp',
+    'analytics_bp'
 ]

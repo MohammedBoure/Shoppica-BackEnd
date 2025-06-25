@@ -75,13 +75,14 @@ class Product(Base):
     name = Column(String, nullable=False)
     description = Column(String)
     price = Column(Float, nullable=False)
+    purchase_price = Column(Float, nullable=False)  
     stock_quantity = Column(Integer, nullable=False)
     low_stock_threshold = Column(Integer, default=5, nullable=False)
     category_id = Column(Integer, ForeignKey('categories.id'))
     image_url = Column(String)
     is_active = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     category = relationship("Category", back_populates="products")
     images = relationship("ProductImage", back_populates="product", cascade="all, delete-orphan")
@@ -89,7 +90,7 @@ class Product(Base):
     cart_items = relationship("CartItem", back_populates="product", cascade="all, delete-orphan")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
     discounts = relationship("ProductDiscount", back_populates="product", cascade="all, delete-orphan")
-    
+
     __table_args__ = (
         Index('idx_products_category_id', 'category_id'),
     )

@@ -1,4 +1,4 @@
-from .base import Database, Product, ProductImage
+from .base import Database, Product, ProductImage, Category
 from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 import logging
@@ -9,8 +9,19 @@ from werkzeug.utils import secure_filename
 class ProductManager(Database):
     """Manages operations for the products table in the database using SQLAlchemy ORM."""
 
-    def add_product(self, name, price, stock_quantity, category_id=None, description=None, image_file=None, image_url='', is_active=True):
-        """Adds a new product with an optional image upload."""
+    def add_product(
+        self,
+        name,
+        price,
+        purchase_price,
+        stock_quantity,
+        category_id=None,
+        description=None,
+        image_file=None,
+        image_url='',
+        is_active=True
+    ):
+        """Adds a new product with optional image and purchase price."""
         try:
             with next(self.get_db_session()) as session:
                 # Validate required fields
@@ -19,6 +30,9 @@ class ProductManager(Database):
                     return None
                 if price is None or price < 0:
                     logging.error("Valid product price is required")
+                    return None
+                if purchase_price is None or purchase_price < 0:
+                    logging.error("Valid purchase price is required")
                     return None
                 if stock_quantity is None or stock_quantity < 0:
                     logging.error("Valid stock quantity is required")
@@ -31,21 +45,25 @@ class ProductManager(Database):
                         logging.error("Invalid image file provided")
                         return None
 
-                # Create new product
+                # Create new product instance
                 new_product = Product(
                     name=name,
                     description=description,
                     price=price,
+                    purchase_price=purchase_price,
                     stock_quantity=stock_quantity,
                     category_id=category_id,
                     image_url=image_url,
                     is_active=is_active
                 )
+
+                # Save to DB
                 session.add(new_product)
                 session.commit()
                 product_id = new_product.id
                 logging.info(f"Product {name} added with ID: {product_id}")
                 return product_id
+
         except Exception as e:
             logging.error(f"Error adding product {name}: {e}")
             return None
@@ -77,7 +95,7 @@ class ProductManager(Database):
             logging.error(f"Error retrieving products for category {category_id}: {e}")
             return []
 
-    def update_product(self, product_id, name=None, description=None, price=None, stock_quantity=None, category_id=None, image_file=None, image_url=None, is_active=None):
+    def update_product(self, product_id, name=None, description=None, price=None, purchase_price=None, stock_quantity=None, low_stock_threshold=None, category_id=None, image_file=None, image_url=None, is_active=None):
         """Updates product details. Only provided fields are updated."""
         try:
             with next(self.get_db_session()) as session:
@@ -86,31 +104,82 @@ class ProductManager(Database):
                     logging.warning(f"No product found with ID: {product_id}")
                     return False
 
+                # Validate and update fields
                 if name is not None:
                     product.name = name
+
                 if description is not None:
                     product.description = description
+
                 if price is not None:
-                    product.price = price
+                    try:
+                        price = float(price)
+                        if price < 0:
+                            raise ValueError("Price must be non-negative")
+                        product.price = price
+                    except (ValueError, TypeError) as e:
+                        logging.error(f"Invalid price: {e}")
+                        return False
+
+                if purchase_price is not None:
+                    try:
+                        purchase_price = float(purchase_price)
+                        if purchase_price < 0:
+                            raise ValueError("Purchase price must be non-negative")
+                        product.purchase_price = purchase_price
+                    except (ValueError, TypeError) as e:
+                        logging.error(f"Invalid purchase_price: {e}")
+                        return False
+
                 if stock_quantity is not None:
-                    product.stock_quantity = stock_quantity
+                    try:
+                        stock_quantity = int(stock_quantity)
+                        if stock_quantity < 0:
+                            raise ValueError("Stock quantity must be non-negative")
+                        product.stock_quantity = stock_quantity
+                    except (ValueError, TypeError) as e:
+                        logging.error(f"Invalid stock_quantity: {e}")
+                        return False
+
+                if low_stock_threshold is not None:
+                    try:
+                        low_stock_threshold = int(low_stock_threshold)
+                        if low_stock_threshold < 0:
+                            raise ValueError("Low stock threshold must be non-negative")
+                        product.low_stock_threshold = low_stock_threshold
+                    except (ValueError, TypeError) as e:
+                        logging.error(f"Invalid low_stock_threshold: {e}")
+                        return False
+
                 if category_id is not None:
+                    category = session.get(Category, category_id)
+                    if not category:
+                        logging.error(f"Invalid category_id: {category_id}")
+                        return False
                     product.category_id = category_id
+
                 if is_active is not None:
-                    product.is_active = is_active
+                    if is_active not in (0, 1, True, False):
+                        logging.error("is_active must be 0 or 1")
+                        return False
+                    product.is_active = int(bool(is_active))
+
+                # Handle image upload
                 if image_file and self._allowed_file(image_file.filename):
-                    image_url = self._save_image(image_file)
-                    if image_url:
-                        product.image_url = image_url
+                    new_image_url = self._save_image(image_file)
+                    if new_image_url:
+                        product.image_url = new_image_url
                 elif image_url is not None:
                     product.image_url = image_url
 
                 session.commit()
                 logging.info(f"Updated product with ID: {product_id}")
                 return True
+
         except Exception as e:
             logging.error(f"Error updating product {product_id}: {e}")
             return False
+
 
     def delete_product(self, product_id):
         """Deletes a product by its ID."""

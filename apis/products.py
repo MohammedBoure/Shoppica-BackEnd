@@ -21,49 +21,42 @@ logger = logging.getLogger(__name__)
 @products_bp.route('/products', methods=['POST'])
 @admin_required
 def add_product():
-    """API to add a new product with optional image upload."""
     try:
         with next(product_manager.get_db_session()) as session:
             name = request.form.get('name')
             price = request.form.get('price')
+            purchase_price = request.form.get('purchase_price')
             stock_quantity = request.form.get('stock_quantity')
             category_id = request.form.get('category_id', type=int)
             description = request.form.get('description')
             is_active = request.form.get('is_active', 1, type=int)
             image_file = request.files.get('image')
 
-            # Validate required fields
-            if not name or price is None or stock_quantity is None:
-                logger.warning("Missing required fields: name, price, or stock_quantity")
-                return jsonify({'error': 'Name, price, and stock quantity are required', 'error_code': 'INVALID_INPUT'}), 400
+            if not name or price is None or stock_quantity is None or purchase_price is None:
+                return jsonify({'error': 'Name, price, purchase price and stock quantity are required', 'error_code': 'INVALID_INPUT'}), 400
 
-            # Validate price and stock_quantity
             try:
                 price = float(price)
+                purchase_price = float(purchase_price)
                 stock_quantity = int(stock_quantity)
             except (ValueError, TypeError):
-                logger.warning(f"Invalid input: price={price}, stock_quantity={stock_quantity}")
-                return jsonify({'error': 'Price must be a number and stock quantity must be an integer', 'error_code': 'INVALID_TYPE'}), 400
+                return jsonify({'error': 'Invalid price, purchase price or stock quantity', 'error_code': 'INVALID_TYPE'}), 400
 
-            if price < 0 or stock_quantity < 0:
-                logger.warning(f"Invalid input: price={price}, stock_quantity={stock_quantity}")
-                return jsonify({'error': 'Price and stock quantity must be non-negative', 'error_code': 'INVALID_VALUE'}), 400
+            if price < 0 or purchase_price < 0 or stock_quantity < 0:
+                return jsonify({'error': 'Values must be non-negative', 'error_code': 'INVALID_VALUE'}), 400
 
-            # Validate is_active
             if is_active not in (0, 1):
-                logger.warning(f"Invalid is_active value: {is_active}")
                 return jsonify({'error': 'is_active must be 0 or 1', 'error_code': 'INVALID_VALUE'}), 400
 
-            # Validate category_id if provided
             if category_id is not None:
                 category = session.get(Category, category_id)
                 if not category:
-                    logger.warning(f"Invalid category_id: {category_id}")
                     return jsonify({'error': 'Invalid category ID', 'error_code': 'INVALID_CATEGORY'}), 400
 
             product_id = product_manager.add_product(
                 name=name,
                 price=price,
+                purchase_price=purchase_price,
                 stock_quantity=stock_quantity,
                 category_id=category_id,
                 description=description,
@@ -72,17 +65,13 @@ def add_product():
             )
 
             if product_id:
-                logger.info(f"Product added successfully: product_id={product_id}")
                 return jsonify({'message': 'Product added successfully', 'product_id': product_id}), 201
-            logger.error("Failed to add product")
             session.rollback()
             return jsonify({'error': 'Failed to add product', 'error_code': 'DATABASE_ERROR'}), 500
-    except SQLAlchemyError as e:
-        logger.error(f"Database error adding product: {str(e)}")
+    except SQLAlchemyError:
         session.rollback()
         return jsonify({'error': 'Database error', 'error_code': 'DATABASE_ERROR'}), 500
-    except Exception as e:
-        logger.error(f"Error adding product: {str(e)}")
+    except Exception:
         session.rollback()
         return jsonify({'error': 'Internal server error', 'error_code': 'INTERNAL_ERROR'}), 500
 
@@ -169,41 +158,37 @@ def get_products_by_category(category_id):
 @products_bp.route('/products/<int:product_id>', methods=['PUT'])
 @admin_required
 def update_product(product_id):
-    """API to update product details with optional image upload."""
     try:
         with next(product_manager.get_db_session()) as session:
             name = request.form.get('name')
             description = request.form.get('description')
             price = request.form.get('price', type=float)
+            purchase_price = request.form.get('purchase_price', type=float)
             stock_quantity = request.form.get('stock_quantity', type=int)
             category_id = request.form.get('category_id', type=int)
             is_active = request.form.get('is_active', type=int)
             image_file = request.files.get('image')
 
-            if not any([name, description is not None, price is not None, stock_quantity is not None, category_id is not None, image_file, is_active is not None]):
-                logger.warning(f"No valid fields provided for updating product_id={product_id}")
+            if not any([name, description is not None, price is not None, purchase_price is not None, stock_quantity is not None, category_id is not None, image_file, is_active is not None]):
                 return jsonify({'error': 'At least one field must be provided', 'error_code': 'INVALID_INPUT'}), 400
 
             if price is not None and price < 0:
-                logger.warning(f"Invalid price: price={price} for product_id={product_id}")
                 return jsonify({'error': 'Price must be non-negative', 'error_code': 'INVALID_VALUE'}), 400
 
+            if purchase_price is not None and purchase_price < 0:
+                return jsonify({'error': 'Purchase price must be non-negative', 'error_code': 'INVALID_VALUE'}), 400
+
             if stock_quantity is not None and stock_quantity < 0:
-                logger.warning(f"Invalid stock_quantity: stock_quantity={stock_quantity} for product_id={product_id}")
                 return jsonify({'error': 'Stock quantity must be non-negative', 'error_code': 'INVALID_VALUE'}), 400
 
             if is_active is not None and is_active not in (0, 1):
-                logger.warning(f"Invalid is_active value: {is_active} for product_id={product_id}")
                 return jsonify({'error': 'is_active must be 0 or 1', 'error_code': 'INVALID_VALUE'}), 400
 
-            # Validate category_id if provided
             if category_id is not None:
                 category = session.get(Category, category_id)
                 if not category:
-                    logger.warning(f"Invalid category_id: {category_id}")
                     return jsonify({'error': 'Invalid category ID', 'error_code': 'INVALID_CATEGORY'}), 400
 
-            # Delete old image file if a new image is provided
             if image_file:
                 existing_product = product_manager.get_product_by_id(product_id)
                 if existing_product and existing_product.image_url:
@@ -211,15 +196,15 @@ def update_product(product_id):
                     if os.path.exists(image_path):
                         try:
                             os.remove(image_path)
-                            logger.info(f"Deleted old image file: {existing_product.image_url}")
-                        except Exception as e:
-                            logger.warning(f"Failed to delete old image file {existing_product.image_url}: {str(e)}")
+                        except Exception:
+                            pass
 
             success = product_manager.update_product(
                 product_id=product_id,
                 name=name,
                 description=description,
                 price=price,
+                purchase_price=purchase_price,
                 stock_quantity=stock_quantity,
                 category_id=category_id,
                 image_file=image_file,
@@ -227,19 +212,16 @@ def update_product(product_id):
             )
 
             if success:
-                logger.info(f"Product updated successfully: product_id={product_id}")
                 return jsonify({'message': 'Product updated successfully'}), 200
-            logger.warning(f"Product not found or failed to update: product_id={product_id}")
             session.rollback()
             return jsonify({'error': 'Product not found or failed to update', 'error_code': 'NOT_FOUND'}), 404
-    except SQLAlchemyError as e:
-        logger.error(f"Database error updating product {product_id}: {str(e)}")
+    except SQLAlchemyError:
         session.rollback()
         return jsonify({'error': 'Database error', 'error_code': 'DATABASE_ERROR'}), 500
-    except Exception as e:
-        logger.error(f"Error updating product {product_id}: {str(e)}")
+    except Exception:
         session.rollback()
         return jsonify({'error': 'Internal server error', 'error_code': 'INTERNAL_ERROR'}), 500
+
 
 @products_bp.route('/products/<int:product_id>', methods=['DELETE'])
 @admin_required

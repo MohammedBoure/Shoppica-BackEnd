@@ -13,6 +13,7 @@ from .discount import DiscountManager
 from .discount_usage import DiscountUsageManager
 from .product_discount import ProductDiscountManager
 from .category_discount import CategoryDiscountManager
+from .analytics import AnalyticsManager
 
 __all__ = [
     'Database',
@@ -30,4 +31,5 @@ __all__ = [
     'DiscountUsageManager',
     'ProductDiscountManager',
     'CategoryDiscountManager',
+    'AnalyticsManager',
 ]
