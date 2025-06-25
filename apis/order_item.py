@@ -9,9 +9,6 @@ order_items_bp = Blueprint('order_items', __name__)
 order_item_manager = OrderItemManager()
 order_manager = OrderManager()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-
 @order_items_bp.route('/order_items', methods=['POST'])
 @admin_required
 def add_order_item():
@@ -42,18 +39,18 @@ def get_order_item_by_id(order_item_id):
         return jsonify({'error': 'Order item not found'}), 404
 
     # Check if the user owns the order or is admin
-    order = order_manager.get_order_by_id(order_item['order_id'])
+    order = order_manager.get_order_by_id(order_item.order_id)
     if not order:
         return jsonify({'error': 'Associated order not found'}), 404
-    if order['user_id'] != current_user_id and not is_admin:
+    if order['user_id'] != current_user_id and not is_admin:  # Changed from order.user_id to order['user_id']
         return jsonify({'error': 'Unauthorized access to this order item'}), 403
 
     return jsonify({
-        'id': order_item['id'],
-        'order_id': order_item['order_id'],
-        'product_id': order_item['product_id'],
-        'quantity': order_item['quantity'],
-        'price': order_item['price']
+        'id': order_item.id,
+        'order_id': order_item.order_id,
+        'product_id': order_item.product_id,
+        'quantity': order_item.quantity,
+        'price': order_item.price
     }), 200
 
 @order_items_bp.route('/order_items/order/<int:order_id>', methods=['GET'])
@@ -67,23 +64,21 @@ def get_order_items_by_order(order_id):
     order = order_manager.get_order_by_id(order_id)
     if not order:
         return jsonify({'error': 'Order not found'}), 404
-    if order['user_id'] != current_user_id and not is_admin:
+    if order['user_id'] != current_user_id and not is_admin:  # Changed from order.user_id to order['user_id']
         return jsonify({'error': 'Unauthorized to view items for this order'}), 403
 
     order_items = order_item_manager.get_order_items_by_order(order_id)
-    if order_items:
-        order_items_list = [
-            {
-                'id': item['id'],
-                'order_id': item['order_id'],
-                'product_id': item['product_id'],
-                'quantity': item['quantity'],
-                'price': item['price'],
-                'product_name': item['name']
-            } for item in order_items
-        ]
-        return jsonify({'order_items': order_items_list}), 200
-    return jsonify({'order_items': [], 'message': 'No order items found for this order'}), 200
+    order_items_list = [
+        {
+            'id': item[0].id,
+            'order_id': item[0].order_id,
+            'product_id': item[0].product_id,
+            'quantity': item[0].quantity,
+            'price': item[0].price,
+            'product_name': item[1]
+        } for item in order_items
+    ]
+    return jsonify({'order_items': order_items_list}), 200
 
 @order_items_bp.route('/order_items/<int:order_item_id>', methods=['PUT'])
 @admin_required
@@ -117,12 +112,12 @@ def get_order_items():
     order_items, total = order_item_manager.get_order_items(page, per_page)
     order_items_list = [
         {
-            'id': item['id'],
-            'order_id': item['order_id'],
-            'product_id': item['product_id'],
-            'quantity': item['quantity'],
-            'price': item['price'],
-            'product_name': item['name']
+            'id': item[0].id,
+            'order_id': item[0].order_id,
+            'product_id': item[0].product_id,
+            'quantity': item[0].quantity,
+            'price': item[0].price,
+            'product_name': item[1]
         } for item in order_items
     ]
     return jsonify({

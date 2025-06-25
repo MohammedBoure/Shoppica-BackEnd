@@ -1,7 +1,1 @@
-refactor(database): migrate from sqlite3 to SQLAlchemy
-
-Replaced all sqlite3 logic in database/base.py with SQLAlchemy.
-- Set up SQLAlchemy engine and session
-- Used declarative base for model definitions
-- Updated all DB operations to use SQLAlchemy ORM
-This improves maintainability and scalability.
+refactor(db): migrate to SQLAlchemy and add new search helpers, update all APIs

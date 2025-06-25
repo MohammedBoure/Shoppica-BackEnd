@@ -36,12 +36,12 @@ def get_payment_by_id(payment_id):
     payment = payment_manager.get_payment_by_id(payment_id)
     if payment:
         return jsonify({
-            'id': payment['id'],
-            'order_id': payment['order_id'],
-            'payment_method': payment['payment_method'],
-            'payment_status': payment['payment_status'],
-            'transaction_id': payment['transaction_id'],
-            'paid_at': payment['paid_at']
+            'id': payment.id,
+            'order_id': payment.order_id,
+            'payment_method': payment.payment_method,
+            'payment_status': payment.payment_status,
+            'transaction_id': payment.transaction_id,
+            'paid_at': payment.paid_at.isoformat() if payment.paid_at else None
         }), 200
     return jsonify({'error': 'Payment not found'}), 404
 
@@ -50,19 +50,20 @@ def get_payment_by_id(payment_id):
 def get_payments_by_order(order_id):
     """API to retrieve all payments for an order."""
     payments = payment_manager.get_payments_by_order(order_id)
-    if payments:
-        payments_list = [
-            {
-                'id': payment['id'],
-                'order_id': payment['order_id'],
-                'payment_method': payment['payment_method'],
-                'payment_status': payment['payment_status'],
-                'transaction_id': payment['transaction_id'],
-                'paid_at': payment['paid_at']
-            } for payment in payments
-        ]
-        return jsonify({'payments': payments_list}), 200
-    return jsonify({'payments': [], 'message': 'No payments found for this order'}), 200
+    payments_list = [
+        {
+            'id': payment.id,
+            'order_id': payment.order_id,
+            'payment_method': payment.payment_method,
+            'payment_status': payment.payment_status,
+            'transaction_id': payment.transaction_id,
+            'paid_at': payment.paid_at.isoformat() if payment.paid_at else None
+        } for payment in payments
+    ]
+    return jsonify({
+        'payments': payments_list,
+        'message': 'No payments found for this order' if not payments_list else None
+    }), 200
 
 @payments_bp.route('/payments/<int:payment_id>', methods=['PUT'])
 @admin_required
@@ -97,12 +98,12 @@ def get_payments():
     payments, total = payment_manager.get_payments(page, per_page)
     payments_list = [
         {
-            'id': payment['id'],
-            'order_id': payment['order_id'],
-            'payment_method': payment['payment_method'],
-            'payment_status': payment['payment_status'],
-            'transaction_id': payment['transaction_id'],
-            'paid_at': payment['paid_at']
+            'id': payment.id,
+            'order_id': payment.order_id,
+            'payment_method': payment.payment_method,
+            'payment_status': payment.payment_status,
+            'transaction_id': payment.transaction_id,
+            'paid_at': payment.paid_at.isoformat() if payment.paid_at else None
         } for payment in payments
     ]
     return jsonify({

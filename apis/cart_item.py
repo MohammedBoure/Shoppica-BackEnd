@@ -13,20 +13,22 @@ cart_item_manager = CartItemManager()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 # --- Custom Decorator for Session Authorization ---
 
 def check_cart_item_ownership(fn):
     """
     Custom decorator (session-based) to ensure the current user owns the cart item or is an admin.
-    It also fetches the cart item and passes it to the decorated function to avoid a second DB call.
+    Fetches the cart item and passes it to the decorated function to avoid a second DB call.
     """
     @wraps(fn)
-    @session_required  # Ensures user is logged in via session first
+    @session_required
     def wrapper(*args, **kwargs):
         cart_item_id = kwargs.get("cart_item_id")
-        current_user_id = session['user_id']
+        current_user_id = session.get('user_id')
         is_admin = session.get('is_admin', False)
+
+        if not current_user_id:
+            return jsonify(error="User not authenticated"), 401
 
         cart_item = cart_item_manager.get_cart_item_by_id(cart_item_id)
         if not cart_item:
@@ -36,77 +38,99 @@ def check_cart_item_ownership(fn):
         if cart_item['user_id'] != current_user_id and not is_admin:
             return jsonify(error="Unauthorized access to this cart item"), 403
         
-        # Pass the fetched item to the route function to avoid re-fetching
+        # Pass the fetched item to the route function
         g.cart_item = cart_item
         return fn(*args, **kwargs)
     return wrapper
-
 
 # --- API Endpoints ---
 
 @cart_items_bp.route('/cart/items', methods=['POST'])
 @session_required
 def add_cart_item():
-    current_user_id = session['user_id']
+    """Add a product to the current user's cart."""
+    current_user_id = session.get('user_id')
+    if not current_user_id:
+        return jsonify(error="User not authenticated"), 401
+
     data = request.get_json()
     if not data or 'product_id' not in data or 'quantity' not in data:
         return jsonify(error="product_id and quantity are required"), 400
 
     try:
+        product_id = int(data['product_id'])
+        quantity = int(data['quantity'])
+        if quantity <= 0:
+            return jsonify(error="Quantity must be a positive integer"), 400
+
         cart_item_id = cart_item_manager.add_cart_item(
             user_id=current_user_id,
-            product_id=data['product_id'],
-            quantity=data['quantity']
+            product_id=product_id,
+            quantity=quantity
         )
         if cart_item_id:
             new_item = cart_item_manager.get_cart_item_by_id(cart_item_id)
-            return jsonify(dict(new_item)), 201  # ✅ fix here
-        return jsonify(error="Failed to add cart item"), 500
+            if not new_item:
+                return jsonify(error="Failed to retrieve newly added cart item"), 500
+            return jsonify(new_item), 201  # Removed dict() as new_item is already a dict
+        return jsonify(error="Failed to add cart item, possibly due to insufficient stock"), 400
+    except ValueError:
+        return jsonify(error="Invalid product_id or quantity format"), 400
     except Exception as e:
-        logger.error(f"Error adding cart item: {e}", exc_info=True)
+        logger.error(f"Error adding cart item for user {current_user_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
-
 
 @cart_items_bp.route('/cart/items', methods=['GET'])
 @session_required
 def get_my_cart_items():
-    current_user_id = session['user_id']
+    """Retrieve all cart items for the current user."""
+    current_user_id = session.get('user_id')
+    if not current_user_id:
+        return jsonify(error="User not authenticated"), 401
+
     try:
         cart_items = cart_item_manager.get_cart_items_by_user(current_user_id)
-        return jsonify([dict(row) for row in cart_items]), 200  # ✅ fix here
+        return jsonify(cart_items), 200  # cart_items is already a list of dicts
     except Exception as e:
         logger.error(f"Error getting cart items for user {current_user_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
 
-
 @cart_items_bp.route('/cart/items/<int:cart_item_id>', methods=['GET'])
 @check_cart_item_ownership
 def get_cart_item_by_id(cart_item_id):
-    return jsonify(dict(g.cart_item)), 200  # ✅ fix here
-
+    """Retrieve a specific cart item by ID."""
+    return jsonify(g.cart_item), 200  # g.cart_item is already a dict
 
 @cart_items_bp.route('/cart/items/<int:cart_item_id>', methods=['PUT'])
 @check_cart_item_ownership
 def update_cart_item(cart_item_id):
+    """Update the quantity of a specific cart item."""
     data = request.get_json()
-    quantity = data.get('quantity')
-    if quantity is None or not isinstance(quantity, int) or quantity < 0:
-        return jsonify(error="A valid quantity is required"), 400
+    if not data or 'quantity' not in data:
+        return jsonify(error="Quantity is required"), 400
 
     try:
+        quantity = int(data['quantity'])
+        if quantity <= 0:
+            return jsonify(error="Quantity must be a positive integer"), 400
+
         success = cart_item_manager.update_cart_item(cart_item_id, quantity)
         if success:
             updated_item = cart_item_manager.get_cart_item_by_id(cart_item_id)
-            return jsonify(dict(updated_item)), 200  # ✅ fix here
-        return jsonify(error="Failed to update cart item"), 400
+            if not updated_item:
+                return jsonify(error="Failed to retrieve updated cart item"), 500
+            return jsonify(updated_item), 200  # updated_item is already a dict
+        return jsonify(error="Failed to update cart item, possibly due to insufficient stock"), 400
+    except ValueError:
+        return jsonify(error="Invalid quantity format"), 400
     except Exception as e:
         logger.error(f"Error updating cart item {cart_item_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
 
-
 @cart_items_bp.route('/cart/items/<int:cart_item_id>', methods=['DELETE'])
 @check_cart_item_ownership
 def delete_cart_item(cart_item_id):
+    """Delete a specific cart item."""
     try:
         success = cart_item_manager.delete_cart_item(cart_item_id)
         if success:
@@ -115,28 +139,31 @@ def delete_cart_item(cart_item_id):
     except Exception as e:
         logger.error(f"Error deleting cart item {cart_item_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
-    
-    
+
 @cart_items_bp.route('/admin/cart_items/user/<int:user_id>', methods=['GET'])
 @admin_required
 def get_cart_items_by_user_as_admin(user_id):
+    """(Admin) Retrieve all cart items for a specific user."""
     try:
         cart_items = cart_item_manager.get_cart_items_by_user(user_id)
-        return jsonify([dict(row) for row in cart_items]), 200  # ✅ fix here
+        return jsonify(cart_items), 200  # cart_items is already a list of dicts
     except Exception as e:
         logger.error(f"Admin error getting cart items for user {user_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
 
-
 @cart_items_bp.route('/admin/cart_items', methods=['GET'])
 @admin_required
 def get_all_cart_items_paginated():
+    """(Admin) Retrieve paginated cart items."""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
+        if page < 1 or per_page < 1:
+            return jsonify(error="Invalid page or per_page value"), 400
+
         cart_items, total = cart_item_manager.get_cart_items(page, per_page)
         return jsonify({
-            'cart_items': [dict(row) for row in cart_items],  # ✅ fix here
+            'cart_items': cart_items,  # cart_items is already a list of dicts
             'total': total,
             'page': page,
             'per_page': per_page
@@ -145,12 +172,14 @@ def get_all_cart_items_paginated():
         logger.error(f"Admin error getting paginated cart items: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
 
-
 @cart_items_bp.route('/cart/clear', methods=['DELETE'])
 @session_required
 def clear_my_cart():
-    """API to clear all items from the currently authenticated user's cart."""
-    current_user_id = session['user_id']
+    """Clear all items from the current user's cart."""
+    current_user_id = session.get('user_id')
+    if not current_user_id:
+        return jsonify(error="User not authenticated"), 401
+
     try:
         deleted_count = cart_item_manager.delete_cart_items_by_user(current_user_id)
         return jsonify(message=f"Cart cleared successfully. {deleted_count} items removed."), 200
@@ -161,8 +190,11 @@ def clear_my_cart():
 @cart_items_bp.route('/cart/stats', methods=['GET'])
 @session_required
 def get_my_cart_stats():
-    """API to retrieve statistics for the currently authenticated user's cart."""
-    current_user_id = session['user_id']
+    """Retrieve statistics for the current user's cart."""
+    current_user_id = session.get('user_id')
+    if not current_user_id:
+        return jsonify(error="User not authenticated"), 401
+
     try:
         stats = cart_item_manager.get_user_cart_stats(current_user_id)
         return jsonify(stats), 200
@@ -170,20 +202,22 @@ def get_my_cart_stats():
         logger.error(f"Error getting cart stats for user {current_user_id}: {e}", exc_info=True)
         return jsonify(error="An internal server error occurred"), 500
 
-
-# --- نقاط نهاية جديدة للمسؤول فقط ---
+# --- Admin-Only Endpoints ---
 
 @cart_items_bp.route('/admin/cart_items/search', methods=['GET'])
 @admin_required
 def search_cart_items():
-    """(Admin) API to search for cart items based on user_id or product_id."""
+    """(Admin) Search for cart items based on user_id or product_id with pagination."""
     user_id = request.args.get('user_id', type=int)
     product_id = request.args.get('product_id', type=int)
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
 
     if not user_id and not product_id:
-        return jsonify(error="At least one search parameter (user_id, product_id) is required"), 400
+        return jsonify(error="At least one search parameter (user_id or product_id) is required"), 400
+
+    if page < 1 or per_page < 1:
+        return jsonify(error="Invalid page or per_page value"), 400
 
     try:
         items, total = cart_item_manager.search_cart_items(
@@ -202,7 +236,7 @@ def search_cart_items():
 @cart_items_bp.route('/admin/cart_items/user/<int:user_id>', methods=['DELETE'])
 @admin_required
 def clear_user_cart_as_admin(user_id):
-    """(Admin) API to clear all cart items for a specific user."""
+    """(Admin) Clear all cart items for a specific user."""
     try:
         deleted_count = cart_item_manager.delete_cart_items_by_user(user_id)
         return jsonify(message=f"Cart for user {user_id} cleared successfully. {deleted_count} items removed."), 200
@@ -213,7 +247,7 @@ def clear_user_cart_as_admin(user_id):
 @cart_items_bp.route('/admin/cart_items/product/<int:product_id>', methods=['DELETE'])
 @admin_required
 def delete_cart_items_by_product(product_id):
-    """(Admin) API to delete all cart items for a specific product."""
+    """(Admin) Delete all cart items for a specific product."""
     try:
         deleted_count = cart_item_manager.delete_cart_items_by_product(product_id)
         return jsonify(message=f"All cart items for product {product_id} deleted successfully. {deleted_count} items removed."), 200
@@ -224,7 +258,7 @@ def delete_cart_items_by_product(product_id):
 @cart_items_bp.route('/admin/cart/stats', methods=['GET'])
 @admin_required
 def get_overall_cart_stats():
-    """(Admin) API to get overall statistics for all cart items."""
+    """(Admin) Retrieve overall statistics for all cart items."""
     try:
         stats = cart_item_manager.get_cart_stats()
         return jsonify(stats), 200
@@ -235,7 +269,7 @@ def get_overall_cart_stats():
 @cart_items_bp.route('/admin/cart_items/user/<int:user_id>/stats', methods=['GET'])
 @admin_required
 def get_user_cart_stats_as_admin(user_id):
-    """(Admin) API to retrieve statistics for a specific user's cart."""
+    """(Admin) Retrieve statistics for a specific user's cart."""
     try:
         stats = cart_item_manager.get_user_cart_stats(user_id)
         return jsonify(stats), 200

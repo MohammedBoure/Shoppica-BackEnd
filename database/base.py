@@ -288,6 +288,7 @@ class Database:
             # Enable foreign key support in SQLite
             with self.engine.connect() as connection:
                 connection.execute(text("PRAGMA foreign_keys = ON;"))
+
             
             # Check and create default admin user
             with next(self.get_db_session()) as session:

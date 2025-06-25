@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session
 from database import DiscountUsageManager
 from .auth import session_required, admin_required
 import logging
+from datetime import datetime
 
 discount_usages_bp = Blueprint('discount_usages', __name__)
 discount_usage_manager = DiscountUsageManager()
@@ -9,6 +10,10 @@ discount_usage_manager = DiscountUsageManager()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def serialize_datetime(dt):
+    """Helper function to serialize datetime objects to ISO format."""
+    return dt.isoformat() if isinstance(dt, datetime) else None
 
 @discount_usages_bp.route('/discount_usages', methods=['POST'])
 @session_required
@@ -46,10 +51,10 @@ def get_discount_usage_by_id(usage_id):
         usage = discount_usage_manager.get_discount_usage_by_id(usage_id)
         if usage:
             return jsonify({
-                'id': usage['id'],
-                'discount_id': usage['discount_id'],
-                'user_id': usage['user_id'],
-                'used_at': usage['used_at']
+                'id': usage.id,
+                'discount_id': usage.discount_id,
+                'user_id': usage.user_id,
+                'used_at': serialize_datetime(usage.used_at)
             }), 200
         return jsonify({'error': 'Discount usage not found'}), 404
     except Exception as e:
@@ -63,10 +68,10 @@ def get_discount_usages_by_discount(discount_id):
         usages = discount_usage_manager.get_discount_usages_by_discount(discount_id)
         usages_list = [
             {
-                'id': usage['id'],
-                'discount_id': usage['discount_id'],
-                'user_id': usage['user_id'],
-                'used_at': usage['used_at']
+                'id': usage.id,
+                'discount_id': usage.discount_id,
+                'user_id': usage.user_id,
+                'used_at': serialize_datetime(usage.used_at)
             } for usage in usages or []
         ]
         return jsonify({'discount_usages': usages_list}), 200
@@ -85,10 +90,10 @@ def get_discount_usages_by_user(user_id):
         usages = discount_usage_manager.get_discount_usages_by_user(user_id)
         usages_list = [
             {
-                'id': usage['id'],
-                'discount_id': usage['discount_id'],
-                'user_id': usage['user_id'],
-                'used_at': usage['used_at']
+                'id': usage.id,
+                'discount_id': usage.discount_id,
+                'user_id': usage.user_id,
+                'used_at': serialize_datetime(usage.used_at)
             } for usage in usages or []
         ]
         return jsonify({'discount_usages': usages_list}), 200
@@ -115,15 +120,18 @@ def get_discount_usages():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
 
+        if page < 1 or per_page < 1:
+            return jsonify({'error': 'Page and per_page must be positive integers'}), 400
+
         usages, total = discount_usage_manager.get_discount_usages(page, per_page)
         usages_list = [
             {
-                'id': usage['id'],
-                'discount_id': usage['discount_id'],
-                'user_id': usage['user_id'],
-                'used_at': usage['used_at'],
-                'discount_code': usage['code']
-            } for usage in usages or []
+                'id': usage.id,
+                'discount_id': usage.discount_id,
+                'user_id': usage.user_id,
+                'used_at': serialize_datetime(usage.used_at),
+                'discount_code': discount_code
+            } for usage, discount_code in usages or []
         ]
         return jsonify({
             'discount_usages': usages_list,
