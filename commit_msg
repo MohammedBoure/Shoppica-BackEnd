@@ -1,1 +1,7 @@
-feat: create initial DB functions for new /analytics/sales, /analytics/users, and /analytics/products endpoints
+feat(api): add new analytics endpoints for discount effectiveness, product performance, and customer retention
+
+- Created APIs:
+  - GET /analytics/discount-effectiveness
+  - GET /analytics/product-performance
+  - GET /analytics/customer-retention
+- Added corresponding database functions for each endpoint
