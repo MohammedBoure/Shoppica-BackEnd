@@ -1,11 +1,11 @@
 # User API Documentation
 
-This document provides detailed information about the User API endpoints implemented in the Flask Blueprint `users`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
+This document provides detailed information about the User API endpoints implemented using the `UserManager` class. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses. The API interacts with the `users` table in a SQLite database via SQLAlchemy.
 
 ## Authentication
-- Most endpoints require session-based authentication using the `@session_required` decorator, which checks for a valid `user_id` in the session.
-- Some endpoints (e.g., `/users` GET, `/users/<int:user_id>` DELETE, `/users/search`, `/users/clear-all`) require admin privileges, enforced by the `@admin_required` decorator.
-- The `current_user_id` is extracted from the session as an integer, and the `is_admin` flag (boolean) determines if the user has admin privileges.
+- Most endpoints require session-based authentication, typically enforced by a `@session_required` decorator, which checks for a valid `user_id` in the session.
+- Endpoints requiring admin privileges (e.g., `/users`, `/users/<int:user_id>` DELETE, `/users/search`, `/users/clear-all`, `/users/count`) are restricted to users with `is_admin=1`, enforced by an `@admin_required` decorator.
+- The `current_user_id` is extracted from the session as an integer, and the `is_admin` flag (stored as an integer `0` or `1`) determines admin privileges.
 - The `/users` POST endpoint does not require authentication, allowing anyone to register a new user.
 
 ---
@@ -20,11 +20,12 @@ Creates a new user in the system. This endpoint does not require authentication,
 - **Content-Type**: `application/json`
 - **Required Fields**:
   - `username` (string): The username for the new user (must be unique).
-  - `email` (string): The email address of the new user (must be unique and valid format).
-  - `password` (string): The password for the new user (minimum 6 characters).
+  - `email` (string): The email address of the new user (must be unique).
+  - `password` (string): The password for the new user.
 - **Optional Fields**:
   - `full_name` (string): The full name of the user.
   - `phone_number` (string): The phone number of the user.
+  - `is_admin` (integer, default: `0`): Indicates if the user has admin privileges (0 or 1).
 
 **Example Request Body**:
 ```json
@@ -33,7 +34,8 @@ Creates a new user in the system. This endpoint does not require authentication,
   "email": "john.doe@example.com",
   "password": "securepassword123",
   "full_name": "John Doe",
-  "phone_number": "+1234567890"
+  "phone_number": "+1234567890",
+  "is_admin": 0
 }
 ```
 
@@ -46,22 +48,6 @@ Creates a new user in the system. This endpoint does not require authentication,
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Missing required fields or invalid email/password.
-    ```json
-    {
-      "error": "Username, email, and password are required"
-    }
-    ```
-    ```json
-    {
-      "error": "Invalid email format"
-    }
-    ```
-    ```json
-    {
-      "error": "Password must be at least 6 characters long"
-    }
-    ```
   - **HTTP 409**: Username or email already exists.
     ```json
     {
@@ -75,6 +61,11 @@ Creates a new user in the system. This endpoint does not require authentication,
     }
     ```
 
+**Notes**:
+- The `UserManager.add_user` method checks for duplicate `username` or `email` before creating the user.
+- Passwords are hashed using the `scrypt` algorithm from `passlib`.
+- The `is_admin` field is stored as an integer (0 or 1) in the database.
+
 ---
 
 ## 2. Get User by ID
@@ -85,7 +76,7 @@ Retrieves the details of a specific user by their ID. Only the user themselves o
 
 ### Authentication
 - Requires a valid session (`@session_required`).
-- Non-admin users can only access their own user data.
+- Non-admin users can only access their own user data (i.e., `current_user_id == user_id`).
 
 ### Inputs (URL Parameters)
 - `user_id` (integer): The ID of the user to retrieve.
@@ -99,13 +90,14 @@ Retrieves the details of a specific user by their ID. Only the user themselves o
     "email": "john.doe@example.com",
     "full_name": "John Doe",
     "phone_number": "+1234567890",
-    "is_admin": false,
-    "created_at": "2025-05-23T22:18:00.000000"
+    "is_admin": 0,
+    "created_at": "2025-06-26T19:58:00.000000"
   }
   ```
   - Note: The `created_at` field is a string in ISO 8601 format.
+  - The `is_admin` field is returned as an integer (0 or 1).
 - **Error Responses**:
-  - **HTTP 403**: Unauthorized to access the user data.
+  - **HTTP 403**: Unauthorized to access the user data (non-admin accessing another user's data).
     ```json
     {
       "error": "Unauthorized access"
@@ -124,6 +116,10 @@ Retrieves the details of a specific user by their ID. Only the user themselves o
     }
     ```
 
+**Notes**:
+- Uses `UserManager.get_user_by_id` to fetch user data.
+- The `password_hash` field is included in the response for consistency with the code, but it should be excluded in a production API for security.
+
 ---
 
 ## 3. Get User by Email
@@ -134,7 +130,7 @@ Retrieves the details of a specific user by their email address. Only the user t
 
 ### Authentication
 - Requires a valid session (`@session_required`).
-- Non-admin users can only access their own user data.
+- Non-admin users can only access their own user data (i.e., `current_user.email == email`).
 
 ### Inputs (URL Parameters)
 - `email` (string): The email address of the user to retrieve.
@@ -148,11 +144,12 @@ Retrieves the details of a specific user by their email address. Only the user t
     "email": "john.doe@example.com",
     "full_name": "John Doe",
     "phone_number": "+1234567890",
-    "is_admin": false,
-    "created_at": "2025-05-23T22:18:00.000000"
+    "is_admin": 0,
+    "created_at": "2025-06-26T19:58:00.000000"
   }
   ```
   - Note: The `created_at` field is a string in ISO 8601 format.
+  - The `is_admin` field is returned as an integer (0 or 1).
 - **Error Responses**:
   - **HTTP 403**: Unauthorized to access the user data.
     ```json
@@ -173,6 +170,10 @@ Retrieves the details of a specific user by their email address. Only the user t
     }
     ```
 
+**Notes**:
+- Uses `UserManager.get_user_by_email` to fetch user data.
+- The `password_hash` field is included in the response for consistency with the code, but it should be excluded in a production API for security.
+
 ---
 
 ## 4. Get User by Username
@@ -183,7 +184,7 @@ Retrieves the details of a specific user by their username. Only the user themse
 
 ### Authentication
 - Requires a valid session (`@session_required`).
-- Non-admin users can only access their own user data.
+- Non-admin users can only access their own user data (i.e., `current_user.username == username`).
 
 ### Inputs (URL Parameters)
 - `username` (string): The username of the user to retrieve.
@@ -197,11 +198,12 @@ Retrieves the details of a specific user by their username. Only the user themse
     "email": "john.doe@example.com",
     "full_name": "John Doe",
     "phone_number": "+1234567890",
-    "is_admin": false,
-    "created_at": "2025-05-23T22:18:00.000000"
+    "is_admin": 0,
+    "created_at": "2025-06-26T19:58:00.000000"
   }
   ```
   - Note: The `created_at` field is a string in ISO 8601 format.
+  - The `is_admin` field is returned as an integer (0 or 1).
 - **Error Responses**:
   - **HTTP 403**: Unauthorized to access the user data.
     ```json
@@ -221,6 +223,10 @@ Retrieves the details of a specific user by their username. Only the user themse
       "error": "Failed to retrieve user due to database error"
     }
     ```
+
+**Notes**:
+- Uses `UserManager.get_user_by_username` to fetch user data.
+- The `password_hash` field is included in the response for consistency with the code, but it should be excluded in a production API for security.
 
 ---
 
@@ -241,15 +247,15 @@ Updates the details of an existing user. Only the user themselves or an admin ca
   - **Optional Fields**:
     - `full_name` (string): The full name of the user.
     - `phone_number` (string): The phone number of the user.
-    - `is_admin` (boolean): Indicates if the user has admin privileges (admin-only).
-    - `password` (string): The new password for the user (minimum 6 characters).
+    - `is_admin` (integer): Indicates if the user has admin privileges (0 or 1, admin-only).
+    - `password` (string): The new password for the user.
 
 **Example Request Body**:
 ```json
 {
   "full_name": "John A. Doe",
   "phone_number": "+0987654321",
-  "is_admin": false,
+  "is_admin": 0,
   "password": "newpassword123"
 }
 ```
@@ -262,17 +268,6 @@ Updates the details of an existing user. Only the user themselves or an admin ca
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Invalid request body, no updates provided, or invalid password length.
-    ```json
-    {
-      "error": "Request body must be JSON"
-    }
-    ```
-    ```json
-    {
-      "error": "Password must be at least 6 characters long"
-    }
-    ```
   - **HTTP 403**: Unauthorized to update the user data or non-admin attempting to update `is_admin`.
     ```json
     {
@@ -284,10 +279,10 @@ Updates the details of an existing user. Only the user themselves or an admin ca
       "error": "Only admins can update is_admin status"
     }
     ```
-  - **HTTP 404**: User not found or no updates provided.
+  - **HTTP 404**: User not found.
     ```json
     {
-      "error": "User not found or no updates provided"
+      "error": "User not found"
     }
     ```
   - **HTTP 500**: Database error.
@@ -296,6 +291,12 @@ Updates the details of an existing user. Only the user themselves or an admin ca
       "error": "Failed to update user due to database error"
     }
     ```
+
+**Notes**:
+- Uses `UserManager.update_user` to update user data.
+- Only provided fields are updated; others remain unchanged.
+- The `is_admin` field is stored and processed as an integer (0 or 1).
+- The restriction on `is_admin` updates is enforced in the API layer, not in `UserManager.update_user`.
 
 ---
 
@@ -326,10 +327,10 @@ Deletes a user by their ID. This endpoint is restricted to admin users only.
       "error": "Unauthorized access"
     }
     ```
-  - **HTTP 404**: User not found or failed to delete.
+  - **HTTP 404**: User not found.
     ```json
     {
-      "error": "User not found or failed to delete"
+      "error": "User not found"
     }
     ```
   - **HTTP 500**: Database error.
@@ -338,6 +339,10 @@ Deletes a user by their ID. This endpoint is restricted to admin users only.
       "error": "Failed to delete user due to database error"
     }
     ```
+
+**Notes**:
+- Uses `UserManager.delete_user` to delete the user.
+- Cascading deletes are handled for related data (e.g., `addresses`, `reviews`) due to `cascade="all, delete-orphan"` in the database schema.
 
 ---
 
@@ -365,8 +370,8 @@ Retrieves a paginated list of all users in the system. This endpoint is restrict
         "email": "john.doe@example.com",
         "full_name": "John Doe",
         "phone_number": "+1234567890",
-        "is_admin": false,
-        "created_at": "2025-05-23T22:18:00.000000"
+        "is_admin": 0,
+        "created_at": "2025-06-26T19:58:00.000000"
       }
     ],
     "total": 50,
@@ -375,6 +380,7 @@ Retrieves a paginated list of all users in the system. This endpoint is restrict
   }
   ```
   - Note: The `created_at` field is a string in ISO 8601 format.
+  - The `is_admin` field is returned as an integer (0 or 1).
 - **Error Responses**:
   - **HTTP 403**: Unauthorized access (admin privileges required).
     ```json
@@ -389,6 +395,10 @@ Retrieves a paginated list of all users in the system. This endpoint is restrict
     }
     ```
 
+**Notes**:
+- Uses `UserManager.get_users` to fetch paginated user data.
+- The `password_hash` field is included in the response for consistency with the code, but it should be excluded in a production API for security.
+
 ---
 
 ## 8. Validate User Password
@@ -399,7 +409,7 @@ Validates a user's password. Only the user themselves or an admin can validate t
 
 ### Authentication
 - Requires a valid session (`@session_required`).
-- Non-admin users can only validate their own password.
+- Non-admin users can only validate their own password (i.e., `current_user_id == user_id`).
 
 ### Inputs
 - **URL Parameters**:
@@ -426,18 +436,13 @@ Validates a user's password. Only the user themselves or an admin can validate t
   - **HTTP 400**: Missing or invalid request body.
     ```json
     {
-      "error": "Request body must be JSON"
-    }
-    ```
-    ```json
-    {
       "error": "Password is required"
     }
     ```
-  - **HTTP 401**: Invalid password.
+  - **HTTP 401**: Invalid password or user not found.
     ```json
     {
-      "error": "Invalid password"
+      "error": "Invalid password or user not found"
     }
     ```
   - **HTTP 403**: Unauthorized to validate the password.
@@ -452,6 +457,11 @@ Validates a user's password. Only the user themselves or an admin can validate t
       "error": "Failed to validate password due to database error"
     }
     ```
+
+**Notes**:
+- Uses `UserManager.validate_password` to check the password against the stored hash.
+- The `scrypt.verify` method from `passlib` is used for password validation.
+- The code returns `False` for both invalid passwords and non-existent users, so the API should map this to HTTP 401.
 
 ---
 
@@ -480,8 +490,8 @@ Searches for users by username or email (partial match) with pagination. This en
         "email": "john.doe@example.com",
         "full_name": "John Doe",
         "phone_number": "+1234567890",
-        "is_admin": false,
-        "created_at": "2025-05-23T22:18:00.000000"
+        "is_admin": 0,
+        "created_at": "2025-06-26T19:58:00.000000"
       }
     ],
     "total": 10,
@@ -490,11 +500,12 @@ Searches for users by username or email (partial match) with pagination. This en
   }
   ```
   - Note: The `created_at` field is a string in ISO 8601 format.
+  - The `is_admin` field is returned as an integer (0 or 1).
 - **Error Responses**:
   - **HTTP 400**: Missing search query parameter.
     ```json
     {
-      "error": "Search query parameter \"q\" is required"
+      "error": "Search query parameter 'q' is required"
     }
     ```
   - **HTTP 403**: Unauthorized access (admin privileges required).
@@ -509,6 +520,10 @@ Searches for users by username or email (partial match) with pagination. This en
       "error": "Failed to search users due to database error"
     }
     ```
+
+**Notes**:
+- Uses `UserManager.search_users` to perform case-insensitive partial matches on `username` or `email` using `ilike`.
+- The `password_hash` field is included in the response for consistency with the code, but it should be excluded in a production API for security.
 
 ---
 
@@ -545,16 +560,44 @@ Deletes all users from the database. This is a destructive operation and is rest
     }
     ```
 
+**Notes**:
+- Uses `UserManager.clear_all_users` to delete all users.
+- Cascading deletes are handled for related data due to `cascade="all, delete-orphan"` in the database schema.
+
 ---
 
-## Notes
-- All endpoints (except `/users` POST) use the `UserManager` class to interact with the database, leveraging SQLAlchemy for data operations.
-- Logging is configured with `%(asctime)s - %(levelname)s - %(message)s` format for debugging and monitoring.
-- The `is_admin` field is stored as an integer (0 or 1) in the database but is returned as a boolean (`true` or `false`) in API responses.
-- The `created_at` field in responses is a string in ISO 8601 format (e.g., "2025-05-23T22:18:00.000000").
-- The `UserManager` class handles database operations, including unique constraints for `username` and `email`, and foreign key support for SQLite.
-- Passwords are hashed using `passlib`'s `scrypt` algorithm, ensuring security.
-- The `update_user` endpoint restricts `is_admin` updates to admins only, enhancing security.
-- Error responses include descriptive `error` fields to help clients diagnose issues.
-- Sensitive data (e.g., `password_hash`) is never exposed in API responses.
-- Indexes (`idx_users_username`, `idx_users_email`) defined in the database schema improve query performance for lookups and searches.
+## 11. Get Total User Count (Admin Only)
+### Endpoint: `/users/count`
+### Method: `GET`
+### Description
+Returns the total number of users in the database. This endpoint is restricted to admin users only.
+
+### Authentication
+- Requires a valid session with admin privileges (`@admin_required`).
+
+### Inputs
+- None.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "total_users": 50
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 403**: Unauthorized access (admin privileges required).
+    ```json
+    {
+      "error": "Unauthorized access"
+    }
+    ```
+  - **HTTP 500**: Database error.
+    ```json
+    {
+      "error": "Failed to retrieve total user count due to database error"
+    }
+    ```
+
+**Notes**:
+- Uses `UserManager.get_total_user_count` to fetch the total number of users.

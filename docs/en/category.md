@@ -1,10 +1,10 @@
 # Categories API Documentation
 
-This document provides detailed information about the Categories API endpoints implemented in the Flask Blueprint `categories`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
+This document provides detailed information about the Categories API endpoints implemented in the Flask Blueprint `categories`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses. The API interacts with the `categories` table in a SQLite database via the `CategoryManager` class.
 
 ## Authentication
-- Endpoints for adding (`POST /categories`), updating (`PUT /categories/<int:category_id>`), and deleting (`DELETE /categories/<int:category_id>`) categories require admin privileges, enforced by the `@admin_required` decorator.
-- Endpoints for retrieving a specific category (`GET /categories/<int:category_id>`), retrieving categories by parent (`GET /categories/parent`), and retrieving all categories (`GET /categories`) do not require authentication, allowing public access to category data.
+- Endpoints for adding (`POST /categories`), updating (`PUT /categories/<int:category_id>`), and deleting (`DELETE /categories/<int:category_id>`) categories require admin privileges, enforced by the `@admin_required` decorator, which checks for a valid `user_id` and `is_admin=True` in the session.
+- Endpoints for retrieving a specific category (`GET /categories/<int:category_id>`), retrieving categories by parent (`GET /categories/parent`), retrieving all categories (`GET /categories`), and searching categories (`GET /categories/search`) are publicly accessible without authentication.
 - The `CategoryManager` class handles all database interactions for category-related operations.
 
 ---
@@ -13,25 +13,26 @@ This document provides detailed information about the Categories API endpoints i
 ### Endpoint: `/categories`
 ### Method: `POST`
 ### Description
-Creates a new category in the system. This endpoint is restricted to admin users only.
+Creates a new category with an optional image upload or image URL. This endpoint is restricted to admin users only and uses `multipart/form-data` for file uploads.
 
 ### Authentication
 - Requires a valid session with admin privileges (`@admin_required`).
 
 ### Inputs (Request Body)
-- **Content-Type**: `application/json`
+- **Content-Type**: `multipart/form-data`
 - **Required Fields**:
   - `name` (string): The name of the category.
 - **Optional Fields**:
   - `parent_id` (integer): The ID of the parent category (null for top-level categories).
+  - `image_url` (string): A URL to an image for the category (used if no image file is provided).
+  - `image` (file): An image file (PNG, JPG, or JPEG) to upload for the category.
 
-**Example Request Body**:
-```json
-{
-  "name": "Electronics",
-  "parent_id": null
-}
-```
+**Example Request** (using `multipart/form-data`):
+- Form fields:
+  - `name`: "Electronics"
+  - `parent_id`: null
+  - `image_url`: "" (optional, fallback if no image file)
+  - `image`: (file upload, e.g., `electronics.jpg`)
 
 ### Outputs
 - **Success Response** (HTTP 201):
@@ -42,10 +43,21 @@ Creates a new category in the system. This endpoint is restricted to admin users
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Missing required field (`name`).
+  - **HTTP 400**: Missing required field (`name`) or invalid image file.
     ```json
     {
       "error": "Category name is required"
+    }
+    ```
+    ```json
+    {
+      "error": "Invalid image file"
+    }
+    ```
+  - **HTTP 401**: Invalid or missing session (user not authenticated).
+    ```json
+    {
+      "error": "Unauthorized"
     }
     ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
@@ -60,6 +72,12 @@ Creates a new category in the system. This endpoint is restricted to admin users
       "error": "Failed to add category"
     }
     ```
+
+**Notes**:
+- Uses `CategoryManager.add_category` to create the category.
+- Image files are saved to `static/uploads/categories/` with a unique filename generated using UUID.
+- Only PNG, JPG, and JPEG image formats are allowed, validated by the `allowed_file` function.
+- If an image file is provided, it takes precedence over `image_url`.
 
 ---
 
@@ -81,7 +99,8 @@ Retrieves the details of a specific category by its ID. This endpoint is publicl
   {
     "id": 123,
     "name": "Electronics",
-    "parent_id": null
+    "parent_id": null,
+    "image_url": "/static/uploads/categories/abc123.jpg"
   }
   ```
 - **Error Responses**:
@@ -91,6 +110,10 @@ Retrieves the details of a specific category by its ID. This endpoint is publicl
       "error": "Category not found"
     }
     ```
+
+**Notes**:
+- Uses `CategoryManager.get_category_by_id` to fetch the category.
+- The `image_url` field may be empty or null if no image is associated with the category.
 
 ---
 
@@ -114,9 +137,11 @@ Retrieves all categories with a specified parent ID (or top-level categories if 
       {
         "id": 123,
         "name": "Electronics",
-        "parent_id": null
+        "parent_id": null,
+        "image_url": "/static/uploads/categories/abc123.jpg"
       }
-    ]
+    ],
+    "message": "Categories retrieved successfully"
   }
   ```
 - **Empty Response** (HTTP 200):
@@ -127,13 +152,17 @@ Retrieves all categories with a specified parent ID (or top-level categories if 
   }
   ```
 
+**Notes**:
+- Uses `CategoryManager.get_categories_by_parent` to fetch categories.
+- The `message` field provides context for empty results.
+
 ---
 
 ## 4. Update Category
 ### Endpoint: `/categories/<int:category_id>`
 ### Method: `PUT`
 ### Description
-Updates the details of an existing category. This endpoint is restricted to admin users only.
+Updates the details of an existing category with optional image upload or image URL. This endpoint is restricted to admin users only and uses `multipart/form-data` for file uploads.
 
 ### Authentication
 - Requires a valid session with admin privileges (`@admin_required`).
@@ -141,18 +170,19 @@ Updates the details of an existing category. This endpoint is restricted to admi
 ### Inputs
 - **URL Parameters**:
   - `category_id` (integer): The ID of the category to update.
-- **Request Body** (Content-Type: `application/json`):
+- **Request Body** (Content-Type: `multipart/form-data`):
   - **Optional Fields**:
     - `name` (string): The updated name of the category.
     - `parent_id` (integer): The updated parent category ID (null for top-level categories).
+    - `image_url` (string): The updated image URL (used if no image file is provided).
+    - `image` (file): An updated image file (PNG, JPG, or JPEG) to upload for the category.
 
-**Example Request Body**:
-```json
-{
-  "name": "Updated Electronics",
-  "parent_id": 456
-}
-```
+**Example Request** (using `multipart/form-data`):
+- Form fields:
+  - `name`: "Updated Electronics"
+  - `parent_id`: 456
+  - `image_url`: "" (optional, fallback if no image file)
+  - `image`: (file upload, e.g., `updated_electronics.jpg`)
 
 ### Outputs
 - **Success Response** (HTTP 200):
@@ -162,10 +192,21 @@ Updates the details of an existing category. This endpoint is restricted to admi
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Failure to update the category (e.g., invalid data or database error).
+  - **HTTP 400**: No valid fields provided or invalid image file.
     ```json
     {
-      "error": "Failed to update category"
+      "error": "At least one field (name, parent_id, image_url, or image) must be provided"
+    }
+    ```
+    ```json
+    {
+      "error": "Invalid image file"
+    }
+    ```
+  - **HTTP 401**: Invalid or missing session (user not authenticated).
+    ```json
+    {
+      "error": "Unauthorized"
     }
     ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
@@ -174,6 +215,17 @@ Updates the details of an existing category. This endpoint is restricted to admi
       "error": "Admin privileges required"
     }
     ```
+  - **HTTP 404**: Category with the specified ID does not exist or failed to update.
+    ```json
+    {
+      "error": "Category not found or failed to update"
+    }
+    ```
+
+**Notes**:
+- Uses `CategoryManager.update_category` to update the category.
+- At least one field (`name`, `parent_id`, `image_url`, or `image`) must be provided.
+- Image files are saved to `static/uploads/categories/` with a unique filename, and `image_url` is updated if an image is uploaded.
 
 ---
 
@@ -198,6 +250,12 @@ Deletes a category by its ID. This endpoint is restricted to admin users only.
   }
   ```
 - **Error Responses**:
+  - **HTTP 401**: Invalid or missing session (user not authenticated).
+    ```json
+    {
+      "error": "Unauthorized"
+    }
+    ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
@@ -210,6 +268,10 @@ Deletes a category by its ID. This endpoint is restricted to admin users only.
       "error": "Category not found or failed to delete"
     }
     ```
+
+**Notes**:
+- Uses `CategoryManager.delete_category` to delete the category.
+- Cascading deletes are assumed to handle related data (e.g., child categories or products) due to database schema constraints.
 
 ---
 
@@ -234,7 +296,8 @@ Retrieves a paginated list of all categories in the system. This endpoint is pub
       {
         "id": 123,
         "name": "Electronics",
-        "parent_id": null
+        "parent_id": null,
+        "image_url": "/static/uploads/categories/abc123.jpg"
       }
     ],
     "total": 50,
@@ -243,12 +306,74 @@ Retrieves a paginated list of all categories in the system. This endpoint is pub
   }
   ```
 
+**Notes**:
+- Uses `CategoryManager.get_categories` to fetch paginated categories.
+- The response includes pagination metadata (`total`, `page`, `per_page`).
+
+---
+
+## 7. Search Categories
+### Endpoint: `/categories/search`
+### Method: `GET`
+### Description
+Searches categories by name with pagination. This endpoint is publicly accessible without authentication.
+
+### Authentication
+- No authentication required.
+
+### Inputs (Query Parameters)
+- `search_term` (string, required): The term to search for in category names (case-insensitive partial match).
+- `page` (integer, default: `1`): The page number for pagination.
+- `per_page` (integer, default: `20`): The number of categories per page.
+
+### Outputs
+- **Success Response** (HTTP 200):
+  ```json
+  {
+    "categories": [
+      {
+        "id": 123,
+        "name": "Electronics",
+        "parent_id": null,
+        "image_url": "/static/uploads/categories/abc123.jpg"
+      }
+    ],
+    "total": 10,
+    "page": 1,
+    "per_page": 20,
+    "message": "Categories retrieved successfully"
+  }
+  ```
+- **Empty Response** (HTTP 200):
+  ```json
+  {
+    "categories": [],
+    "total": 0,
+    "page": 1,
+    "per_page": 20,
+    "message": "No categories found for this search term"
+  }
+  ```
+- **Error Responses**:
+  - **HTTP 400**: Missing search term.
+    ```json
+    {
+      "error": "Search term is required"
+    }
+    ```
+
+**Notes**:
+- Uses `CategoryManager.search_categories` to perform a case-insensitive search on category names.
+- The response includes pagination metadata and a `message` field for context.
+
 ---
 
 ## Notes
 - All endpoints interact with the database through the `CategoryManager` class.
-- Logging is configured using `logging.basicConfig(level=logging.INFO)` for debugging and monitoring purposes.
+- Logging is configured with `logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')` for debugging and monitoring, with checks to avoid duplicate handler configuration.
 - Error responses include a descriptive `error` field to assist clients in troubleshooting.
-- Public endpoints (`GET /categories/<int:category_id>`, `GET /categories/parent`, and `GET /categories`) provide read-only access to category data without requiring authentication.
+- Public endpoints (`GET /categories/<int:category_id>`, `GET /categories/parent`, `GET /categories`, `GET /categories/search`) provide read-only access to category data without requiring authentication.
 - The `parent_id` field can be null for top-level categories, indicating they have no parent.
-- The `GET /categories/parent` endpoint returns an empty list with a message if no categories are found for the specified parent ID.
+- Image uploads are stored in `static/uploads/categories/` with unique filenames generated using UUID, and only PNG, JPG, and JPEG formats are supported.
+- The `POST /categories` and `PUT /categories/<int:category_id>` endpoints use `multipart/form-data` to support file uploads.
+- SQLite foreign key support is assumed to be enabled (e.g., via `PRAGMA foreign_keys = ON`), ensuring data integrity for related tables like `products` or child categories.

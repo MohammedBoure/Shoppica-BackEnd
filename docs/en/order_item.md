@@ -3,10 +3,14 @@
 This document provides detailed information about the Order Items API endpoints implemented in the Flask Blueprint `order_items`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- Endpoints for adding (`POST /order_items`), updating (`PUT /order_items/<int:order_item_id>`), deleting (`DELETE /order_items/<int:order_item_id>`), and retrieving all order items (`GET /order_items`) require admin privileges, enforced by the `@admin_required` decorator.
 - Endpoints for retrieving a specific order item (`GET /order_items/<int:order_item_id>`) and retrieving order items by order (`GET /order_items/order/<int:order_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
-- Non-admin users can only access order items associated with their own orders (`order['user_id']` must match `session['user_id']`).
-- The `OrderItemManager` class handles database interactions for order item-related operations, and the `OrderManager` class is used to verify order ownership.
+- These endpoints also verify that the authenticated user owns the associated order (`order['user_id']` matches `session['user_id']`) or is an admin (`is_admin` is `True`).
+- Endpoints for adding (`POST /order_items`), updating (`PUT /order_items/<int:order_item_id>`), deleting (`DELETE /order_items/<int:order_item_id>`), and retrieving all order items (`GET /order_items`) require admin privileges, enforced by the `@admin_required` decorator.
+- The `OrderItemManager` class handles all database interactions for order item-related operations, and the `OrderManager` class is used to verify order ownership.
+- The `current_user_id` is extracted from the session as an integer, and the `is_admin` flag determines if the user has admin privileges (defaults to `False` if not set).
+
+## Logging
+- Logging is configured with `logging.basicConfig(level=logging.INFO)` in the Flask application, used for debugging and error tracking.
 
 ---
 
@@ -14,7 +18,7 @@ This document provides detailed information about the Order Items API endpoints 
 ### Endpoint: `/order_items`
 ### Method: `POST`
 ### Description
-Creates a new order item for a specified order. This endpoint is restricted to admin users only.
+Adds a new item to an existing order. This endpoint is restricted to admin users only.
 
 ### Authentication
 - Requires a valid session with admin privileges (`@admin_required`).
@@ -22,10 +26,10 @@ Creates a new order item for a specified order. This endpoint is restricted to a
 ### Inputs (Request Body)
 - **Content-Type**: `application/json`
 - **Required Fields**:
-  - `order_id` (integer): The ID of the order to which the item belongs.
-  - `product_id` (integer): The ID of the product being ordered.
-  - `quantity` (integer): The quantity of the product in the order.
-  - `price` (float): The price per unit of the product.
+  - `order_id` (integer): The ID of the order to which the item is added.
+  - `product_id` (integer): The ID of the product to add.
+  - `quantity` (integer): The quantity of the product.
+  - `price` (number): The price of the product (integer or float).
 
 **Example Request Body**:
 ```json
@@ -71,11 +75,11 @@ Creates a new order item for a specified order. This endpoint is restricted to a
 ### Endpoint: `/order_items/<int:order_item_id>`
 ### Method: `GET`
 ### Description
-Retrieves the details of a specific order item by its ID. Only the user who owns the associated order or an admin can access it.
+Retrieves a specific order item by its ID. Only the user who owns the associated order or an admin can access it.
 
 ### Authentication
 - Requires a valid session (`@session_required`).
-- Non-admin users can only access order items for their own orders (`order['user_id']` must match `session['user_id']`).
+- Non-admin users can only access order items for orders they own (`order['user_id']` matches `session['user_id']`).
 
 ### Inputs (URL Parameters)
 - `order_item_id` (integer): The ID of the order item to retrieve.
@@ -92,7 +96,7 @@ Retrieves the details of a specific order item by its ID. Only the user who owns
   }
   ```
 - **Error Responses**:
-  - **HTTP 403**: Unauthorized to access the order item (non-admin attempting to access an order item from another user's order).
+  - **HTTP 403**: Unauthorized access to the order item (non-admin user attempting to access an order item from an order they do not own).
     ```json
     {
       "error": "Unauthorized access to this order item"
@@ -114,13 +118,13 @@ Retrieves the details of a specific order item by its ID. Only the user who owns
 
 ## 3. Get Order Items by Order
 ### Endpoint: `/order_items/order/<int:order_id>`
-### Method: `GET`
+### Method: `lichen
 ### Description
 Retrieves all order items for a specific order. Only the user who owns the order or an admin can access these items.
 
 ### Authentication
 - Requires a valid session (`@session_required`).
-- Non-admin users can only access order items for their own orders (`order['user_id']` must match `session['user_id']`).
+- Non-admin users can only access order items for orders they own (`order['user_id']` matches `session['user_id']`).
 
 ### Inputs (URL Parameters)
 - `order_id` (integer): The ID of the order whose items are to be retrieved.
@@ -136,7 +140,7 @@ Retrieves all order items for a specific order. Only the user who owns the order
         "product_id": 123,
         "quantity": 2,
         "price": 49.99,
-        "product_name": "Wireless Headphones"
+        "product_name": "Example Product"
       }
     ]
   }
@@ -144,12 +148,11 @@ Retrieves all order items for a specific order. Only the user who owns the order
 - **Empty Response** (HTTP 200):
   ```json
   {
-    "order_items": [],
-    "message": "No order items found for this order"
+    "order_items": []
   }
   ```
 - **Error Responses**:
-  - **HTTP 403**: Unauthorized to view items for the order (non-admin attempting to access another user's order).
+  - **HTTP 403**: Unauthorized to view items for the order (non-admin user attempting to access another user's order).
     ```json
     {
       "error": "Unauthorized to view items for this order"
@@ -168,7 +171,7 @@ Retrieves all order items for a specific order. Only the user who owns the order
 ### Endpoint: `/order_items/<int:order_item_id>`
 ### Method: `PUT`
 ### Description
-Updates the details of an existing order item. This endpoint is restricted to admin users only.
+Updates the quantity or price of a specific order item. This endpoint is restricted to admin users only.
 
 ### Authentication
 - Requires a valid session with admin privileges (`@admin_required`).
@@ -179,13 +182,13 @@ Updates the details of an existing order item. This endpoint is restricted to ad
 - **Request Body** (Content-Type: `application/json`):
   - **Optional Fields**:
     - `quantity` (integer): The updated quantity of the product.
-    - `price` (float): The updated price per unit of the product.
+    - `price` (number): The updated price of the product (integer or float).
 
 **Example Request Body**:
 ```json
 {
   "quantity": 3,
-  "price": 45.99
+  "price": 59.99
 }
 ```
 
@@ -197,7 +200,7 @@ Updates the details of an existing order item. This endpoint is restricted to ad
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Failure to update the order item (e.g., invalid data or database error).
+  - **HTTP 400**: Failed to update the order item (e.g., invalid data or database error).
     ```json
     {
       "error": "Failed to update order item"
@@ -216,7 +219,7 @@ Updates the details of an existing order item. This endpoint is restricted to ad
 ### Endpoint: `/order_items/<int:order_item_id>`
 ### Method: `DELETE`
 ### Description
-Deletes an order item by its ID. This endpoint is restricted to admin users only.
+Deletes a specific order item by its ID. This endpoint is restricted to admin users only.
 
 ### Authentication
 - Requires a valid session with admin privileges (`@admin_required`).
@@ -272,7 +275,7 @@ Retrieves a paginated list of all order items in the system. This endpoint is re
         "product_id": 123,
         "quantity": 2,
         "price": 49.99,
-        "product_name": "Wireless Headphones"
+        "product_name": "Example Product"
       }
     ],
     "total": 50,
@@ -291,9 +294,10 @@ Retrieves a paginated list of all order items in the system. This endpoint is re
 ---
 
 ## Notes
-- All endpoints interact with the database through the `OrderItemManager` class, with the `OrderManager` class used to verify order ownership for `GET /order_items/<int:order_item_id>` and `GET /order_items/order/<int:order_id>` endpoints.
-- Logging is configured using `logging.basicConfig(level=logging.INFO)` for debugging and monitoring purposes.
-- The `product_name` field is included in the response for the `GET /order_items/order/<int:order_id>` and `GET /order_items` endpoints to provide additional context.
+- All endpoints interact with the database through the `OrderItemManager` class, which encapsulates database operations for order items, and the `OrderManager` class, which is used to verify order ownership.
+- The `GET /order_items/<int:order_item_id>` and `GET /order_items/order/<int:order_id>` endpoints check order ownership by retrieving the associated order via `OrderManager.get_order_by_id` and comparing `order['user_id']` with `session['user_id']`.
+- The `GET /order_items/order/<int:order_id>` and `GET /order_items` endpoints include a `product_name` field in their responses, as provided by `OrderItemManager.get_order_items_by_order` and `OrderItemManager.get_order_items`.
 - Error responses include a descriptive `error` field to assist clients in troubleshooting.
-- The `GET /order_items/order/<int:order_id>` endpoint returns an empty list with a message if no order items are found for the specified order.
-- The `POST /order_items`, `PUT /order_items/<int:order_item_id>`, `DELETE /order_items/<int:order_item_id>`, and `GET /order_items` endpoints are restricted to admins, while `GET /order_items/<int:order_item_id>` and `GET /order_items/order/<int:order_id>` endpoints allow access to authenticated users who own the associated order.
+- The `POST /order_items` endpoint requires all fields (`order_id`, `product_id`, `quantity`, `price`) but does not explicitly validate their types (e.g., integer for `quantity` or non-negative for `price`), assuming `OrderItemManager` handles such validations.
+- The `PUT /order_items/<int:order_item_id>` endpoint allows partial updates (only `quantity` or `price` can be provided), but the `OrderItemManager.update_order_item` method determines if updates succeed.
+- Pagination is supported for the `GET /order_items` endpoint with `page` and `per_page` query parameters, but no explicit validation for negative or zero values is present in the code.

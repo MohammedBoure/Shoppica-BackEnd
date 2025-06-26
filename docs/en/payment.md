@@ -6,6 +6,10 @@ This document provides detailed information about the Payments API endpoints imp
 - Endpoints for adding (`POST /payments`), retrieving a specific payment (`GET /payments/<int:payment_id>`), and retrieving payments by order (`GET /payments/order/<int:order_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
 - Endpoints for updating (`PUT /payments/<int:payment_id>`), deleting (`DELETE /payments/<int:payment_id>`), and retrieving all payments (`GET /payments`) require admin privileges, enforced by the `@admin_required` decorator.
 - The `PaymentManager` class handles all database interactions for payment-related operations.
+- Unlike other APIs (e.g., Order Items), there are no ownership checks for payments; any authenticated user can access or add payments, while only admins can update, delete, or retrieve all payments.
+
+## Logging
+- Logging is configured with `logging.basicConfig(level=logging.INFO)` for debugging and error tracking.
 
 ---
 
@@ -22,10 +26,10 @@ Creates a new payment for an order. This endpoint requires a valid user session.
 - **Content-Type**: `application/json`
 - **Required Fields**:
   - `order_id` (integer): The ID of the order associated with the payment.
-  - `payment_method` (string): The method used for the payment (e.g., credit card, PayPal).
+  - `payment_method` (string): The method used for the payment (e.g., `credit_card`, `paypal`).
 - **Optional Fields**:
   - `transaction_id` (string): The transaction ID provided by the payment processor.
-  - `payment_status` (string, default: `"unpaid"`): The status of the payment (e.g., unpaid, paid, failed).
+  - `payment_status` (string, default: `"unpaid"`): The status of the payment (e.g., `unpaid`, `paid`, `failed`).
 
 **Example Request Body**:
 ```json
@@ -52,10 +56,10 @@ Creates a new payment for an order. This endpoint requires a valid user session.
       "error": "Order ID and payment method are required"
     }
     ```
-  - **HTTP 403**: Invalid or missing session (user not authenticated).
+  - **HTTP 401**: User not authenticated (missing or invalid session).
     ```json
     {
-      "error": "Authentication required"
+      "error": "User not authenticated"
     }
     ```
   - **HTTP 500**: Server error when failing to add the payment to the database.
@@ -88,20 +92,20 @@ Retrieves the details of a specific payment by its ID. This endpoint requires a 
     "payment_method": "credit_card",
     "payment_status": "paid",
     "transaction_id": "txn_123456",
-    "paid_at": "2025-06-16T12:57:00"
+    "paid_at": "2025-06-26T20:34:00"
   }
   ```
 - **Error Responses**:
+  - **HTTP 401**: User not authenticated (missing or invalid session).
+    ```json
+    {
+      "error": "User not authenticated"
+    }
+    ```
   - **HTTP 404**: Payment with the specified ID does not exist.
     ```json
     {
       "error": "Payment not found"
-    }
-    ```
-  - **HTTP 403**: Invalid or missing session (user not authenticated).
-    ```json
-    {
-      "error": "Authentication required"
     }
     ```
 
@@ -130,9 +134,10 @@ Retrieves all payments associated with a specific order. This endpoint requires 
         "payment_method": "credit_card",
         "payment_status": "paid",
         "transaction_id": "txn_123456",
-        "paid_at": "2025-06-16T12:57:00"
+        "paid_at": "2025-06-26T20:34:00"
       }
-    ]
+    ],
+    "message": null
   }
   ```
 - **Empty Response** (HTTP 200):
@@ -143,10 +148,10 @@ Retrieves all payments associated with a specific order. This endpoint requires 
   }
   ```
 - **Error Responses**:
-  - **HTTP 403**: Invalid or missing session (user not authenticated).
+  - **HTTP 401**: User not authenticated (missing or invalid session).
     ```json
     {
-      "error": "Authentication required"
+      "error": "User not authenticated"
     }
     ```
 
@@ -166,8 +171,8 @@ Updates the details of an existing payment. This endpoint is restricted to admin
   - `payment_id` (integer): The ID of the payment to update.
 - **Request Body** (Content-Type: `application/json`):
   - **Optional Fields**:
-    - `payment_method` (string): The updated payment method (e.g., credit card, PayPal).
-    - `payment_status` (string): The updated payment status (e.g., unpaid, paid, failed).
+    - `payment_method` (string): The updated payment method (e.g., `credit_card`, `paypal`).
+    - `payment_status` (string): The updated payment status (e.g., `unpaid`, `paid`, `failed`).
     - `transaction_id` (string): The updated transaction ID provided by the payment processor.
 
 **Example Request Body**:
@@ -187,7 +192,7 @@ Updates the details of an existing payment. This endpoint is restricted to admin
   }
   ```
 - **Error Responses**:
-  - **HTTP 400**: Failure to update the payment (e.g., invalid data or database error).
+  - **HTTP 400**: Failed to update the payment (e.g., invalid data or database error).
     ```json
     {
       "error": "Failed to update payment"
@@ -262,7 +267,7 @@ Retrieves a paginated list of all payments in the system. This endpoint is restr
         "payment_method": "credit_card",
         "payment_status": "paid",
         "transaction_id": "txn_123456",
-        "paid_at": "2025-06-16T12:57:00"
+        "paid_at": "2025-06-26T20:34:00"
       }
     ],
     "total": 50,
@@ -281,9 +286,11 @@ Retrieves a paginated list of all payments in the system. This endpoint is restr
 ---
 
 ## Notes
-- All endpoints interact with the database through the `PaymentManager` class.
+- All endpoints interact with the database through the `PaymentManager` class, which encapsulates database operations for payments.
 - Logging is configured using `logging.basicConfig(level=logging.INFO)` for debugging and monitoring purposes.
-- The `paid_at` field in responses is a timestamp indicating when the payment was processed (format: `YYYY-MM-DDTHH:MM:SS`).
+- The `paid_at` field in responses is a timestamp indicating when the payment was processed (format: `YYYY-MM-DDTHH:MM:SS`, or `null` if not set).
 - Error responses include a descriptive `error` field to assist clients in troubleshooting.
-- The `GET /payments/order/<int:order_id>` endpoint returns an empty list with a message if no payments are found for the specified order.
-- The `POST /payments`, `GET /payments/<int:payment_id>`, and `GET /payments/order/<int:order_id>` endpoints are accessible to authenticated users, while `PUT`, `DELETE`, and `GET /payments` endpoints are restricted to admins.
+- The `POST /payments`, `GET /payments/<int:payment_id>`, and `GET /payments/order/<int:order_id>` endpoints are accessible to any authenticated user, with no additional ownership checks for the associated order.
+- The `PUT /payments/<int:payment_id>` and `DELETE /payments/<int:payment_id>` endpoints allow partial updates or deletion of payment details, with `PaymentManager` determining the success of the operation.
+- The `GET /payments/order/<int:order_id>` endpoint returns an empty list with a `message` field set to `"No payments found for this order"` if no payments are found.
+- Pagination in `GET /payments` is supported with `page` and `per_page` query parameters, but no explicit validation for negative or zero values is present in the code.

@@ -3,10 +3,14 @@
 This document provides detailed information about the Discount Usages API endpoints implemented in the Flask Blueprint `discount_usages`. Each endpoint is described with its purpose, HTTP method, required authentication, inputs, outputs, and possible error responses.
 
 ## Authentication
-- The endpoint for adding a discount usage (`POST /discount_usages`) and retrieving discount usages by user (`GET /discount_usages/user/<int:user_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
-- Endpoints for retrieving a specific discount usage (`GET /discount_usages/<int:usage_id>`), retrieving discount usages by discount (`GET /discount_usages/discount/<int:discount_id>`), deleting a discount usage (`DELETE /discount_usages/<int:usage_id>`), and retrieving all discount usages (`GET /discount_usages`) require admin privileges, enforced by the `@admin_required` decorator.
+- Endpoints for adding a discount usage (`POST /discount_usages`) and retrieving discount usages by user (`GET /discount_usages/user/<int:user_id>`) require session-based authentication, enforced by the `@session_required` decorator, which checks for a valid `user_id` in the session.
 - Non-admin users can only add or view discount usages associated with their own `user_id` (`user_id` must match `session['user_id']`).
+- Endpoints for retrieving a specific discount usage (`GET /discount_usages/<int:usage_id>`), retrieving discount usages by discount (`GET /discount_usages/discount/<int:discount_id>`), deleting a discount usage (`DELETE /discount_usages/<int:usage_id>`), and retrieving all discount usages (`GET /discount_usages`) require admin privileges, enforced by the `@admin_required` decorator.
 - The `DiscountUsageManager` class handles all database interactions for discount usage-related operations.
+- The `current_user_id` is extracted from the session as an integer, and the `is_admin` flag determines if the user has admin privileges (defaults to `False` if not set).
+
+## Logging
+- Logging is configured with `logging.basicConfig(level=logging.INFO)` and a dedicated logger (`logger = logging.getLogger(__name__)`) for debugging and error tracking.
 
 ---
 
@@ -23,9 +27,9 @@ Records a new usage of a discount by a user. Only the authenticated user can add
 ### Inputs (Request Body)
 - **Content-Type**: `application/json`
 - **Required Fields**:
-  - `discount_id` (integer): The ID of the discount being used.
-  - `user_id` (integer): The ID of the user applying the discount.
-  
+  - `discount_id` (integer): The ID of the discount being used (must be a positive integer).
+  - `user_id` (integer): The ID of the user applying the discount (must be a positive integer).
+
 **Example Request Body**:
 ```json
 {
@@ -64,6 +68,12 @@ Records a new usage of a discount by a user. Only the authenticated user can add
       "error": "User ID must be a positive integer"
     }
     ```
+  - **HTTP 401**: User not authenticated (missing or invalid session).
+    ```json
+    {
+      "error": "User not authenticated"
+    }
+    ```
   - **HTTP 403**: Unauthorized attempt to add a discount usage for another user (`user_id` does not match `current_user_id`).
     ```json
     {
@@ -74,6 +84,11 @@ Records a new usage of a discount by a user. Only the authenticated user can add
     ```json
     {
       "error": "Failed to add discount usage"
+    }
+    ```
+    ```json
+    {
+      "error": "Internal server error"
     }
     ```
 
@@ -98,20 +113,26 @@ Retrieves the details of a specific discount usage by its ID. This endpoint is r
     "id": 789,
     "discount_id": 123,
     "user_id": 456,
-    "used_at": "2025-06-16T13:04:00"
+    "used_at": "2025-06-26T20:42:00"
   }
   ```
 - **Error Responses**:
-  - **HTTP 404**: Discount usage with the specified ID does not exist.
+  - **HTTP 401**: User not authenticated (missing or invalid session).
     ```json
     {
-      "error": "Discount usage not found"
+      "error": "User not authenticated"
     }
     ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
       "error": "Admin privileges required"
+    }
+    ```
+  - **HTTP 404**: Discount usage with the specified ID does not exist.
+    ```json
+    {
+      "error": "Discount usage not found"
     }
     ```
   - **HTTP 500**: Server error when retrieving the discount usage.
@@ -144,7 +165,7 @@ Retrieves all discount usages for a specific discount. This endpoint is restrict
         "id": 789,
         "discount_id": 123,
         "user_id": 456,
-        "used_at": "2025-06-16T13:04:00"
+        "used_at": "2025-06-26T20:42:00"
       }
     ]
   }
@@ -156,6 +177,12 @@ Retrieves all discount usages for a specific discount. This endpoint is restrict
   }
   ```
 - **Error Responses**:
+  - **HTTP 401**: User not authenticated (missing or invalid session).
+    ```json
+    {
+      "error": "User not authenticated"
+    }
+    ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
@@ -193,7 +220,7 @@ Retrieves all discount usages for a specific user. Only the authenticated user c
         "id": 789,
         "discount_id": 123,
         "user_id": 456,
-        "used_at": "2025-06-16T13:04:00"
+        "used_at": "2025-06-26T20:42:00"
       }
     ]
   }
@@ -205,6 +232,12 @@ Retrieves all discount usages for a specific user. Only the authenticated user c
   }
   ```
 - **Error Responses**:
+  - **HTTP 401**: User not authenticated (missing or invalid session).
+    ```json
+    {
+      "error": "User not authenticated"
+    }
+    ```
   - **HTTP 403**: Unauthorized attempt to access another user's discount usages (`user_id` does not match `current_user_id`).
     ```json
     {
@@ -241,6 +274,12 @@ Deletes a discount usage by its ID. This endpoint is restricted to admin users o
   }
   ```
 - **Error Responses**:
+  - **HTTP 401**: User not authenticated (missing or invalid session).
+    ```json
+    {
+      "error": "User not authenticated"
+    }
+    ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
@@ -272,8 +311,8 @@ Retrieves a paginated list of all discount usages in the system. This endpoint i
 - Requires a valid session with admin privileges (`@admin_required`).
 
 ### Inputs (Query Parameters)
-- `page` (integer, default: `1`): The page number for pagination.
-- `per_page` (integer, default: `20`): The number of discount usages per page.
+- `page` (integer, default: `1`): The page number for pagination (must be positive).
+- `per_page` (integer, default: `20`): The number of discount usages per page (must be positive).
 
 ### Outputs
 - **Success Response** (HTTP 200):
@@ -284,7 +323,7 @@ Retrieves a paginated list of all discount usages in the system. This endpoint i
         "id": 789,
         "discount_id": 123,
         "user_id": 456,
-        "used_at": "2025-06-16T13:04:00",
+        "used_at": "2025-06-26T20:42:00",
         "discount_code": "SUMMER25"
       }
     ],
@@ -294,6 +333,18 @@ Retrieves a paginated list of all discount usages in the system. This endpoint i
   }
   ```
 - **Error Responses**:
+  - **HTTP 400**: Invalid `page` or `per_page` values (negative or zero).
+    ```json
+    {
+      "error": "Page and per_page must be positive integers"
+    }
+    ```
+  - **HTTP 401**: User not authenticated (missing or invalid session).
+    ```json
+    {
+      "error": "User not authenticated"
+    }
+    ```
   - **HTTP 403**: Admin privileges required (non-admin user attempting to access).
     ```json
     {
@@ -310,10 +361,10 @@ Retrieves a paginated list of all discount usages in the system. This endpoint i
 ---
 
 ## Notes
-- All endpoints interact with the database through the `DiscountUsageManager` class.
-- Logging is configured using `logging.basicConfig(level=logging.INFO)` with a dedicated logger (`logger = logging.getLogger(__name__)`) for debugging and monitoring.
-- The `used_at` field in responses is a timestamp indicating when the discount was used (format: `YYYY-MM-DDTHH:MM:SS`, or empty string if not available).
-- The `discount_code` field is included in the response for the `GET /discount_usages` endpoint to provide additional context.
+- All endpoints interact with the database through the `DiscountUsageManager` class, which encapsulates database operations for discount usages.
+- Logging is configured using `logging.basicConfig(level=logging.INFO)` with a dedicated logger (`logger = logging.getLogger(__name__)`) for detailed error tracking.
+- The `used_at` field in responses is a timestamp indicating when the discount was used (format: `YYYY-MM-DDTHH:MM:SS`, or `null` if not set), serialized using the `serialize_datetime` helper function.
+- The `discount_code` field is included in the response for the `GET /discount_usages` endpoint, providing the discount code associated with each usage, as returned by `DiscountUsageManager.get_discount_usages`.
 - Error responses include a descriptive `error` field to assist clients in troubleshooting.
-- The `POST /discount_usages` and `GET /discount_usages/user/<int:user_id>` endpoints are accessible to authenticated users, but only for their own `user_id`.
-- The `GET /discount_usages/discount/<int:discount_id>`, `GET /discount_usages/<int:usage_id>`, `DELETE /discount_usages/<int:usage_id>`, and `GET /discount_usages` endpoints are restricted to admins.
+- The `POST /discount_usages` and `GET /discount_usages/user/<int:user_id>` endpoints enforce that non-admin users can only interact with their own `user_id`.
+- The `GET /discount_usages/<int:usage_id>`, `GET /discount_usages/discount/<int:discount_id>`, `DELETE /discount_usages/<int:usage_id>`, and `GET /discount_usages` endpoints are restricted
