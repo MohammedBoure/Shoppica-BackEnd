@@ -1,5 +1,34 @@
 # Changelog
 
+
+## [0.6.0] - 2025-06-26
+
+### Added
+- New analytics endpoints:
+  - `/analytics/discount-effectiveness`
+  - `/analytics/product-performance`
+  - `/analytics/customer-retention`
+- Initial DB functions for:
+  - `/analytics/sales`
+  - `/analytics/users`
+  - `/analytics/products`
+- Dashboard API endpoints:
+  - `/products/low_stock`
+  - `/orders/number`
+  - `/users/number`
+  - `/products/number`
+
+### Fixed
+- Image saving issue when adding product images via `/products/<int:product_id>/images`
+- Image upload and update endpoints to ensure frontend access to uploaded images
+
+### Refactored
+- Migrated database layer from `sqlite3` to **SQLAlchemy**:
+  - Replaced direct SQL with SQLAlchemy ORM
+  - Updated `database/base.py` and all DB operations
+- Added helper functions for improved search in APIs
+
+
 ## [0.5.0] - 2025-06-18
 
 ### Features

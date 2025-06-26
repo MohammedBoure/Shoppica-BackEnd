@@ -1,7 +1,1 @@
-feat(api): add new analytics endpoints for discount effectiveness, product performance, and customer retention
-
-- Created APIs:
-  - GET /analytics/discount-effectiveness
-  - GET /analytics/product-performance
-  - GET /analytics/customer-retention
-- Added corresponding database functions for each endpoint
+chore(changelog): update changelog for version 0.6.0
